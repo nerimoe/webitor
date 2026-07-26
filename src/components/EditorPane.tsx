@@ -7,10 +7,11 @@ import { highlightSelectionMatches, openSearchPanel, search, searchKeymap } from
 import { EditorView, drawSelection, dropCursor, highlightActiveLine, keymap, lineNumbers } from '@codemirror/view'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Tooltip from '@radix-ui/react-tooltip'
-import { Clock3, Download, Eye, EyeOff, FilePlus2, FileText, MoreHorizontal, Redo2, RotateCcw, Save, SaveAll, Search, Share2, Undo2, Upload, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { Clock3, Download, Eye, EyeOff, FilePlus2, FileText, Link2, MoreHorizontal, Redo2, RotateCcw, Save, SaveAll, Search, Share2, Undo2, Upload, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { isMarkdown, loadLanguage } from '../lib/language'
 import { canShareBlob, dataUrlToBlob, shareBlob, shareTextFile } from '../lib/files'
+import { createFileShareUrl, shareOrCopyFileUrl } from '../lib/shareLink'
 import { useWorkspace } from '../store/useWorkspace'
 import type { EditorGroup } from '../types'
 import { IconButton } from './IconButton'
@@ -54,6 +55,7 @@ export function EditorPane({ group, leading, onNewDocument, onImportFiles }: Edi
   const setEditorFontSize = useWorkspace((state) => state.setEditorFontSize)
   const pendingReveal = useWorkspace((state) => state.pendingReveal)
   const setPendingReveal = useWorkspace((state) => state.setPendingReveal)
+  const setNotice = useWorkspace((state) => state.setNotice)
   const [languageExtensions, setLanguageExtensions] = useState<import('@codemirror/state').Extension[]>([])
   const [renaming, setRenaming] = useState(false)
   const [draftName, setDraftName] = useState('')
@@ -150,11 +152,19 @@ export function EditorPane({ group, leading, onNewDocument, onImportFiles }: Edi
     const name = node?.name ?? (image ? 'image' : 'document.txt')
     const blob = content.dataUrl ? dataUrlToBlob(content.dataUrl) : new Blob([content.text], { type: 'text/plain' })
     const share = () => content.dataUrl ? void shareBlob(blob, name) : void shareTextFile(content.text, name)
+    const shareLink = async () => {
+      try {
+        const url = await createFileShareUrl({ name, text: content.text, dataUrl: content.dataUrl, mimeType: content.mimeType })
+        const result = await shareOrCopyFileUrl(url, name)
+        if (result === 'copied') setNotice(url.length > 60_000 ? 'shareLinkLarge' : 'shareLinkCopied')
+      } catch { setNotice('shareLinkFailed') }
+    }
     if (!iOS) {
       next.push({ id: 'save', priority: 0, label: t(node?.handle ? 'save' : 'download'), icon: node?.handle ? Save : Download, onClick: () => void saveFile(fileId) })
       if (window.showSaveFilePicker) next.push({ id: 'save-as', priority: 7, label: t('saveAs'), icon: SaveAll, onClick: () => void saveFile(fileId, true) })
     }
     if (iOS || canShareBlob(blob, name)) next.push({ id: 'share', priority: iOS ? 0 : 2, label: t('share'), icon: Share2, onClick: share })
+    next.push({ id: 'share-link', priority: 5, label: t('createShareLink'), icon: Link2, onClick: () => void shareLink() })
     if (!image) {
       next.push({ id: 'timeline', priority: 6, label: t('timeline'), icon: Clock3, onClick: () => setTimelineOpen(true) })
       next.push({ id: 'zoom-out', priority: 9, label: t('decreaseTextSize'), icon: ZoomOut, onClick: () => setEditorFontSize(editorFontSize - 1) })
@@ -165,7 +175,7 @@ export function EditorPane({ group, leading, onNewDocument, onImportFiles }: Edi
     return next
   // Action callbacks intentionally follow the current editor instance and file.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [content, editorFontSize, fileId, group.id, group.view, iOS, image, markdown, node?.handle, node?.name, previewActive, splitActive, t])
+  }, [content, editorFontSize, fileId, group.id, group.view, iOS, image, markdown, node?.handle, node?.name, previewActive, setNotice, splitActive, t])
   const { ref: actionsRef, visible: visibleActions, overflow: overflowActions } = useActionOverflow(actions, {
     fixedSlots: 1
   })

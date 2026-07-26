@@ -43,6 +43,35 @@ test('opens a file dropped on the editor', async ({ page }) => {
   await expect(page.locator('.cm-content')).toContainText('Dropped text')
 })
 
+test('creates a compressed share link that imports and opens the document', async ({ page }, testInfo) => {
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'share', {
+      configurable: true,
+      value: async (data: ShareData) => { (window as Window & { __sharedFileUrl?: string }).__sharedFileUrl = String(data.url) }
+    })
+  })
+  const text = 'Shared URL content. '.repeat(80)
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'shared-note.txt', mimeType: 'text/plain', buffer: Buffer.from(text) })
+  if (testInfo.project.name === 'ipad') await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
+  await page.getByTestId('sidebar').getByText('shared-note.txt', { exact: true }).click()
+  const shareLink = page.getByRole('button', { name: /Create share link|创建分享链接/ })
+  if (await shareLink.isVisible()) await shareLink.click()
+  else {
+    await page.getByRole('button', { name: /More actions|更多操作/ }).click()
+    await page.getByRole('menuitem', { name: /Create share link|创建分享链接/ }).click()
+  }
+  await expect.poll(() => page.evaluate(() => (window as Window & { __sharedFileUrl?: string }).__sharedFileUrl)).toContain('#share=')
+  const url = await page.evaluate(() => (window as Window & { __sharedFileUrl?: string }).__sharedFileUrl)
+  expect(url).toContain('#share=g.')
+  expect(url!.length).toBeLessThan(text.length / 2)
+  await page.goto(url!)
+  await expect(page.locator('.document-title')).toContainText('shared-note')
+  await expect(page.locator('.cm-content')).toContainText('Shared URL content.')
+  if (testInfo.project.name === 'ipad') await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
+  await expect(page.getByTestId('sidebar').locator('.tree-row')).toHaveCount(2)
+  await expect.poll(() => page.url()).not.toContain('#share=')
+})
+
 test('offers split and single-view targets for external editor drops', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'chromium')
   await page.locator('input[type=file]').first().setInputFiles({ name: 'current.txt', mimeType: 'text/plain', buffer: Buffer.from('Current') })
@@ -141,7 +170,7 @@ test('preserves the file name and expands document actions when space returns', 
   await expect(bar.locator('.title-button span')).toHaveText('untitled.txt')
   expect(await bar.locator('.title-button span').evaluate((title) => title.scrollWidth <= title.clientWidth)).toBe(true)
 
-  await page.setViewportSize({ width: 1000, height: 720 })
+  await page.setViewportSize({ width: 1100, height: 720 })
   await expect(actions.getByRole('button', { name: /Editing timeline|编辑时间线/ })).toBeVisible()
   await expect(actions.getByRole('button', { name: /Increase text size|增大文字/ })).toBeVisible()
   await expect(actions.getByRole('button', { name: /Decrease text size|减小文字/ })).toBeVisible()

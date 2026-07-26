@@ -5,6 +5,7 @@ import * as Tooltip from '@radix-ui/react-tooltip'
 import { FilePlus2, FolderInput, Menu, PanelLeft, PanelLeftOpen, Upload, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { collectDirectory, collectDroppedItems, fileToDataUrl, isProbablyText, isSupportedImage } from './lib/files'
+import { readFileShareHash } from './lib/shareLink'
 import { useWorkspace } from './store/useWorkspace'
 import type { EditorGroup } from './types'
 import { EditorPane } from './components/EditorPane'
@@ -54,6 +55,7 @@ export default function App() {
   const restoredSidebarCollapse = useRef(false)
   const sidebarAnimationTimer = useRef<number | null>(null)
   const sidebarDragCleanup = useRef<(() => void) | null>(null)
+  const importedShareHash = useRef<string | null>(null)
   const narrow = useNarrow()
   const [sidebarAnimating, setSidebarAnimating] = useState(false)
   const [dragTarget, setDragTarget] = useState<'tree' | 'editor' | null>(null)
@@ -61,6 +63,23 @@ export default function App() {
   const [conflict, setConflict] = useState<null | { name: string; resolve: (result: { choice: 'overwrite' | 'copy' | 'skip'; applyAll: boolean }) => void }>(null)
 
   useEffect(() => { void hydrate() }, [hydrate])
+  useEffect(() => {
+    if (!hydrated) return
+    const importSharedFile = () => {
+      const hash = location.hash
+      if (!hash.startsWith('#share=') || importedShareHash.current === hash) return
+      importedShareHash.current = hash
+      history.replaceState(null, '', `${location.pathname}${location.search}`)
+      void readFileShareHash(hash).then((shared) => {
+        if (!shared) return
+        addFile(shared.name, shared.text, { source: 'drop', dataUrl: shared.dataUrl, mimeType: shared.mimeType, open: true, groupId: 'primary' })
+        setSidebarOpen(false)
+      }).catch(() => setNotice('sharedFileInvalid'))
+    }
+    importSharedFile()
+    window.addEventListener('hashchange', importSharedFile)
+    return () => window.removeEventListener('hashchange', importSharedFile)
+  }, [addFile, hydrated, setNotice, setSidebarOpen])
   useEffect(() => { void i18n.changeLanguage(settings.locale) }, [i18n, settings.locale])
   useEffect(() => {
     document.documentElement.dataset.theme = settings.theme
@@ -257,7 +276,7 @@ export default function App() {
           {layout.sidebarOpen && <><button className="drawer-scrim" aria-label={t('close')} onClick={() => setSidebarOpen(false)} /><div className="sidebar-drawer"><Sidebar onImportFiles={() => void pickFiles()} onImportFolder={() => void pickFolder()} /></div></>}
         </>}
       </main>
-      {notice && <div className="toast" role="alert"><span>{t(notice)}</span><button onClick={() => setNotice(null)}><X size={17} /><span className="sr-only">{t('dismiss')}</span></button></div>}
+      {notice && <div className={`toast ${notice === 'copied' || notice === 'shareLinkCopied' || notice === 'shareLinkLarge' ? 'success' : ''}`} role="alert"><span>{t(notice)}</span><button onClick={() => setNotice(null)}><X size={17} /><span className="sr-only">{t('dismiss')}</span></button></div>}
       <Dialog.Root open={Boolean(conflict)} onOpenChange={(open) => { if (!open && conflict) finishConflict('skip') }}>
         <Dialog.Portal>
           <Dialog.Overlay className="dialog-overlay" />
