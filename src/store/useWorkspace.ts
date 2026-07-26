@@ -70,6 +70,7 @@ interface WorkspaceStore extends PersistedState {
 
 const timers = new Map<string, ReturnType<typeof setTimeout>>()
 const queues = new Map<string, Promise<void>>()
+let hydrationPromise: Promise<void> | null = null
 
 function snapshot(state: WorkspaceStore): PersistedState {
   return {
@@ -104,23 +105,30 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
   notice: null,
   selectedNodeId: null,
   pendingReveal: null,
-  hydrate: async () => {
-    try {
-      const stored = await loadState()
-      if (stored) {
-        const defaults = initialPersistedState()
-        const revisions = { ...(stored.revisions ?? {}) }
-        Object.values(stored.contents).forEach((content) => {
-          if (content.contentKind !== 'image' && !revisions[content.fileId]?.length) {
-            revisions[content.fileId] = [{ id: id(), fileId: content.fileId, text: content.text, createdAt: content.cachedAt ?? stored.workspace.updatedAt, version: content.version }]
-          }
-        })
-        set({ ...stored, revisions, layout: { ...defaults.layout, ...stored.layout, groups: stored.layout.groups ?? defaults.layout.groups }, hydrated: true })
+  hydrate: () => {
+    if (get().hydrated) return Promise.resolve()
+    if (hydrationPromise) return hydrationPromise
+    hydrationPromise = (async () => {
+      try {
+        const stored = await loadState()
+        if (stored) {
+          const defaults = initialPersistedState()
+          const revisions = { ...(stored.revisions ?? {}) }
+          Object.values(stored.contents).forEach((content) => {
+            if (content.contentKind !== 'image' && !revisions[content.fileId]?.length) {
+              revisions[content.fileId] = [{ id: id(), fileId: content.fileId, text: content.text, createdAt: content.cachedAt ?? stored.workspace.updatedAt, version: content.version }]
+            }
+          })
+          set({ ...stored, revisions, layout: { ...defaults.layout, ...stored.layout, groups: stored.layout.groups ?? defaults.layout.groups }, hydrated: true })
+        }
+        else set({ hydrated: true })
+      } catch {
+        set({ hydrated: true, notice: 'cacheUnavailable' })
+      } finally {
+        hydrationPromise = null
       }
-      else set({ hydrated: true })
-    } catch {
-      set({ hydrated: true, notice: 'cacheUnavailable' })
-    }
+    })()
+    return hydrationPromise
   },
   persist: async () => {
     try {

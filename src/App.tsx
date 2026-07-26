@@ -56,13 +56,18 @@ export default function App() {
   const sidebarAnimationTimer = useRef<number | null>(null)
   const sidebarDragCleanup = useRef<(() => void) | null>(null)
   const importedShareHash = useRef<string | null>(null)
+  const hydrationStarted = useRef(false)
   const narrow = useNarrow()
   const [sidebarAnimating, setSidebarAnimating] = useState(false)
   const [dragTarget, setDragTarget] = useState<'tree' | 'editor' | null>(null)
   const [applyConflictToAll, setApplyConflictToAll] = useState(false)
   const [conflict, setConflict] = useState<null | { name: string; resolve: (result: { choice: 'overwrite' | 'copy' | 'skip'; applyAll: boolean }) => void }>(null)
 
-  useEffect(() => { void hydrate() }, [hydrate])
+  useEffect(() => {
+    if (hydrationStarted.current) return
+    hydrationStarted.current = true
+    void hydrate()
+  }, [hydrate])
   useEffect(() => {
     if (!hydrated) return
     const importSharedFile = () => {
