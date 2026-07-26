@@ -150,16 +150,16 @@ export function EditorPane({ group, leading, onNewDocument, onImportFiles }: Edi
       : void shareTextFile(content.text, node?.name ?? 'document.txt') })
     if (!image) next.push({ id: 'timeline', priority: 7, label: t('timeline'), icon: Clock3, onClick: () => setTimelineOpen(true) })
     if (markdown) next.push({ id: 'preview', priority: 3, label: t('preview'), icon: Eye, active: previewActive, onClick: () => group.id === 'primary' ? previewMarkdown(fileId) : setGroupView(group.id, group.view === 'editor' ? 'markdown-preview' : 'editor') })
-    next.push({ id: 'close', priority: 0, label: splitActive ? t('closePane') : t('closeFile'), icon: X, onClick: closePane })
     return next
   // Action callbacks intentionally follow the current editor instance and file.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content, fileId, group.id, group.view, iOS, image, markdown, node?.name, previewActive, splitActive, t])
-  const { ref: actionsRef, visible: visibleActions, overflow: overflowActions } = useActionOverflow(actions, { alwaysOverflow: !iOS && Boolean(fileId) })
+  const { ref: actionsRef, visible: visibleActions, overflow: overflowActions } = useActionOverflow(actions, {
+    alwaysOverflow: !iOS && Boolean(fileId),
+    fixedSlots: 1
+  })
 
-  const renderAction = (action: DocumentAction) => action.id === 'close'
-    ? <IconButton key={action.id} icon={X} label={action.label} onPointerDown={(event) => { event.preventDefault(); event.stopPropagation(); action.onClick() }} onKeyDown={closePaneFromKeyboard} />
-    : <IconButton key={action.id} icon={action.icon} label={action.label} active={action.active} onClick={action.onClick} />
+  const renderAction = (action: DocumentAction) => <IconButton key={action.id} icon={action.icon} label={action.label} active={action.active} onClick={action.onClick} />
 
   const renderOverflowAction = (action: DocumentAction) => {
     const Icon = action.icon
@@ -198,6 +198,7 @@ export function EditorPane({ group, leading, onNewDocument, onImportFiles }: Edi
               {!image && <><DropdownMenu.Separator className="menu-separator" /><DropdownMenu.Item className="menu-item with-icon" onSelect={() => setEditorFontSize(editorFontSize + 1)}><ZoomIn size={18} />{t('increaseTextSize')}</DropdownMenu.Item><DropdownMenu.Item className="menu-item with-icon" onSelect={() => setEditorFontSize(editorFontSize - 1)}><ZoomOut size={18} />{t('decreaseTextSize')}</DropdownMenu.Item></>}
             </DropdownMenu.Content></DropdownMenu.Portal>
           </DropdownMenu.Root>}
+          <IconButton icon={X} label={splitActive ? t('closePane') : t('closeFile')} className="pane-close" onPointerDown={(event) => { event.preventDefault(); event.stopPropagation(); closePane() }} onKeyDown={closePaneFromKeyboard} />
         </div>}
       </div>
       {!fileId || !node || !content ? <div className="no-file-state" data-testid="no-file-state"><div className="empty-symbol">Aa</div><h1>{t('noFileTitle')}</h1><p>{t('noFileBody')}</p><div className="empty-actions"><button className="primary-button" onClick={onNewDocument}><FilePlus2 size={18} />{t('newFile')}</button><button className="secondary-button" onClick={onImportFiles}><Upload size={18} />{t('importFiles')}</button></div></div> : image && content.dataUrl

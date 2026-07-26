@@ -115,7 +115,7 @@ button:focus-visible, [role="menuitem"]:focus-visible { outline: 2px solid var(-
 .preview-toolbar { position: absolute; z-index: 4; top: 8px; right: 10px; display: flex; padding: 0 2px; border: 1px solid var(--border); border-radius: 6px; background: color-mix(in srgb, var(--surface) 92%, transparent); box-shadow: var(--shadow); backdrop-filter: blur(8px); }
 .document-bar { min-width: 0; height: 54px; display: flex; align-items: center; border-bottom: 1px solid var(--border); background: var(--surface); }
 .document-leading { flex: 0 0 auto; display: flex; align-items: center; padding-left: max(2px, env(safe-area-inset-left)); }
-.document-title { min-width: 0; flex: 1 1 140px; padding: 0 16px; display: flex; align-items: center; gap: 9px; color: var(--text); font-size: 15px; font-weight: 600; }
+.document-title { min-width: 0; flex: 1 0 clamp(132px, 32%, 220px); padding: 0 16px; display: flex; align-items: center; gap: 9px; color: var(--text); font-size: 15px; font-weight: 600; }
 .document-title svg { flex: 0 0 auto; color: var(--text-muted); }
 .title-button { min-width: 0; flex: 1; padding: 7px 3px; overflow: hidden; border: 0; border-radius: 4px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: text; }
 .title-button:hover, .title-button:focus-visible { background: var(--surface-2); outline: none; }

@@ -9,7 +9,7 @@ export interface OverflowAction {
  * Keeps an icon toolbar from stealing the document title. Hidden actions are
  * rendered by the caller in its overflow menu instead of becoming scrollable.
  */
-export function useActionOverflow<T extends OverflowAction>(items: T[], options: { alwaysOverflow?: boolean } = {}) {
+export function useActionOverflow<T extends OverflowAction>(items: T[], options: { alwaysOverflow?: boolean, fixedSlots?: number } = {}) {
   const ref = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState<number | null>(null)
   const itemKey = items.map((item) => `${item.id}:${item.priority}`).join('|')
@@ -31,8 +31,11 @@ export function useActionOverflow<T extends OverflowAction>(items: T[], options:
   if (width === null || width <= 0) return { ref, visible: items, overflow: [] as T[] }
 
   const slots = Math.max(1, Math.floor((width - 2) / 44))
-  const needsOverflow = options.alwaysOverflow || items.length > slots
-  const directSlots = needsOverflow ? Math.max(0, slots - 1) : items.length
+  const fixedSlots = options.fixedSlots ?? 0
+  const needsOverflow = options.alwaysOverflow || items.length + fixedSlots > slots
+  const directSlots = needsOverflow
+    ? Math.max(0, slots - fixedSlots - 1)
+    : Math.max(0, slots - fixedSlots)
   const visibleIds = new Set([...items].sort((a, b) => a.priority - b.priority).slice(0, directSlots).map((item) => item.id))
 
   return {

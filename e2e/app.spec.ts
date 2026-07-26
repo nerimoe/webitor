@@ -92,6 +92,26 @@ test('renames a document directly from its title', async ({ page }) => {
   await expect(page.getByTestId('sidebar').getByText('renamed-inline.txt', { exact: true })).toBeVisible()
 })
 
+test('collapses document actions before the title and keeps close at the far right', async ({ page }) => {
+  await page.setViewportSize({ width: 440, height: 720 })
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'a-document-with-a-readable-long-name.txt', mimeType: 'text/plain', buffer: Buffer.from('Text') })
+  await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
+  await page.getByTestId('sidebar').getByText('a-document-with-a-readable-long-name.txt', { exact: true }).click()
+  const bar = page.locator('.document-bar')
+  const actions = bar.locator('.editor-actions')
+  const more = actions.getByRole('button', { name: /More actions|更多操作/ })
+  const close = actions.getByRole('button', { name: /Close document|关闭文档/ })
+  await expect(more).toBeVisible()
+  await expect(close).toBeVisible()
+  await expect(actions.getByRole('button', { name: /Editing timeline|编辑时间线/ })).toHaveCount(0)
+  const moreBox = await more.boundingBox()
+  const closeBox = await close.boundingBox()
+  expect(moreBox).not.toBeNull()
+  expect(closeBox).not.toBeNull()
+  expect(closeBox!.x).toBeGreaterThan(moreBox!.x)
+  expect((await bar.locator('.document-title').boundingBox())!.width).toBeGreaterThanOrEqual(132)
+})
+
 test('shows Markdown preview without a duplicate editor toolbar', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name === 'ipad')
   await page.locator('input[type=file]').first().setInputFiles({ name: 'README.md', mimeType: 'text/markdown', buffer: Buffer.from('# Preview') })
