@@ -63,7 +63,13 @@ test('reimports the same share link through the normal conflict flow', async ({ 
       value: async (data: ShareData) => { (window as Window & { __sharedFileUrl?: string }).__sharedFileUrl = String(data.url) }
     })
   })
-  const text = 'Shared URL content. '.repeat(80)
+  const alphabet = '我的你是了不们这一他么在有个好来人那要会就什没到说吗为想能上去道她很看可知得过吧还对里以都事子生时样也和下真现做大啊怎出点起天把开让给但谢着只些如家后儿多意别所话小自回然果发见心走定听觉太该当经妈用打地再因呢女告最手前找行快而死先像等被从明中哦情作跟面诉爱已之问错孩斯成它感干法电间哪西己候次信欢正实关进车年喜认克爸谁方老应比帮无晚动头机分特相全杀需放常直才美于带今力工许东名同长亲种者嘿白学安尔叫理本国第友高两保请非重公记身受住活加何伙题完接拿望解其离谈又新更钱马思部场嗯计任确吃始结利朋警士外件难位表刚希查拉'
+  let randomState = 17
+  let text = ''
+  for (let index = 0; index < 2000; index += 1) {
+    randomState = randomState * 48271 % 2147483647
+    text += alphabet[randomState % alphabet.length]
+  }
   await page.locator('input[type=file]').first().setInputFiles({ name: 'shared-note.txt', mimeType: 'text/plain', buffer: Buffer.from(text) })
   if (testInfo.project.name === 'ipad') await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
   await page.getByTestId('sidebar').getByText('shared-note.txt', { exact: true }).click()
@@ -76,12 +82,12 @@ test('reimports the same share link through the normal conflict flow', async ({ 
   await expect.poll(() => page.evaluate(() => (window as Window & { __sharedFileUrl?: string }).__sharedFileUrl)).toContain('#share=')
   const url = await page.evaluate(() => (window as Window & { __sharedFileUrl?: string }).__sharedFileUrl)
   expect(url).toContain('#share=g.')
-  expect(url!.length).toBeLessThan(text.length / 2)
+  expect(url!.length).toBeLessThan(3400)
   await page.goto(url!)
   await expect(page.getByRole('dialog')).toContainText('shared-note.txt')
   await page.getByRole('button', { name: /Keep both|保留两份/ }).click()
   await expect(page.getByTestId('editor-primary').locator('.document-title')).toContainText('shared-note 2.txt')
-  await expect(page.getByTestId('editor-primary').locator('.cm-content')).toContainText('Shared URL content.')
+  await expect(page.getByTestId('editor-primary').locator('.cm-content')).toContainText(text.slice(0, 32))
   if (testInfo.project.name === 'ipad') await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
   await expect(page.getByTestId('sidebar').locator('.tree-row')).toHaveCount(2)
   await expect.poll(() => page.url()).not.toContain('#share=')
@@ -90,7 +96,7 @@ test('reimports the same share link through the normal conflict flow', async ({ 
   await expect(page.getByRole('dialog')).toContainText('shared-note.txt')
   await page.getByRole('button', { name: /Keep both|保留两份/ }).click()
   await expect(page.getByTestId('editor-primary').locator('.document-title')).toContainText('shared-note 3.txt')
-  await expect(page.getByTestId('editor-primary').locator('.cm-content')).toContainText('Shared URL content.')
+  await expect(page.getByTestId('editor-primary').locator('.cm-content')).toContainText(text.slice(0, 32))
   if (testInfo.project.name === 'ipad') await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
   await expect(page.getByTestId('sidebar').locator('.tree-row')).toHaveCount(3)
   await expect.poll(() => page.url()).not.toContain('#share=')

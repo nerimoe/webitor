@@ -1,10 +1,12 @@
 import { dataUrlToBytes } from './files'
+import { packText, shouldPackText, unpackText } from './textPacking'
 
 const SHARE_PREFIX = '#share='
 const SHARE_MARKER = 'webitor-share'
 const MAX_SHARE_BYTES = 8 * 1024 * 1024
 const MAX_SYSTEM_SHARE_URL_LENGTH = 60_000
 const V2_MAGIC = [0x57, 0x32] as const
+const V3_MAGIC = [0x57, 0x33] as const
 
 interface ShareFileInput {
   name: string
@@ -30,7 +32,7 @@ export class ShareLinkError extends Error {
 }
 
 type LegacyPayload = { v: 1; n: string; t?: string; d?: string; m?: string }
-type BinaryHeader = { v: 2; n: string; k: 't' | 'i'; m?: string }
+type BinaryHeader = { v: 2 | 3; n: string; k: 't' | 'i'; m?: string; e?: 'c' }
 
 const fail = (code: ShareLinkErrorCode, message: string): never => { throw new ShareLinkError(code, message) }
 
@@ -96,7 +98,7 @@ async function transform(bytes: Uint8Array, stream: CompressionStream | Decompre
   return output
 }
 
-function encodeBinaryPayload(input: ShareFileInput) {
+function encodeBinaryPayload(input: ShareFileInput, packed = false) {
   let header: BinaryHeader
   let body: Uint8Array
   if (input.dataUrl) {
@@ -104,12 +106,12 @@ function encodeBinaryPayload(input: ShareFileInput) {
     header = { v: 2, n: input.name, k: 'i', m: input.mimeType || image.mimeType }
     body = image.bytes
   } else {
-    header = { v: 2, n: input.name, k: 't' }
-    body = new TextEncoder().encode(input.text)
+    header = packed ? { v: 3, n: input.name, k: 't', e: 'c' } : { v: 2, n: input.name, k: 't' }
+    body = packed ? packText(input.text) : new TextEncoder().encode(input.text)
   }
   const headerBytes = new TextEncoder().encode(JSON.stringify(header))
   const output = new Uint8Array(6 + headerBytes.byteLength + body.byteLength)
-  output.set(V2_MAGIC, 0)
+  output.set(header.v === 3 ? V3_MAGIC : V2_MAGIC, 0)
   new DataView(output.buffer).setUint32(2, headerBytes.byteLength)
   output.set(headerBytes, 6)
   output.set(body, 6 + headerBytes.byteLength)
@@ -137,10 +139,17 @@ function decodeBinaryPayload(bytes: Uint8Array): SharedFile {
   try {
     header = JSON.parse(new TextDecoder().decode(bytes.subarray(6, 6 + headerLength))) as Partial<BinaryHeader>
   } catch { return fail('invalid', 'The shared file header is corrupt') }
-  if (header.v !== 2) return fail('unsupportedVersion', 'The shared file version is not supported')
+  const version = bytes[1] === V3_MAGIC[1] ? 3 : 2
+  if (header.v !== version) return fail('unsupportedVersion', 'The shared file version is not supported')
+  if (version === 3 && (header.k !== 't' || header.e !== 'c')) return fail('invalid', 'The shared file encoding is invalid')
+  if (version === 2 && header.e) return fail('invalid', 'The shared file encoding is invalid')
   const name = safeName(header.n)
   const body = bytes.subarray(6 + headerLength)
-  if (header.k === 't') return { name, text: new TextDecoder().decode(body) }
+  if (header.k === 't') {
+    try {
+      return { name, text: header.e === 'c' ? unpackText(body) : new TextDecoder().decode(body) }
+    } catch { return fail('invalid', 'The packed shared text is corrupt') }
+  }
   if (header.k === 'i') {
     const mimeType = supportedImageMime(header.m)
     return { name, text: '', dataUrl: `data:${mimeType};base64,${bytesToBase64(body)}`, mimeType }
@@ -175,17 +184,23 @@ export function cleanFileShareUrl() {
 }
 
 export async function createFileShareUrl(input: ShareFileInput) {
-  const source = encodeBinaryPayload(input)
-  if (source.byteLength > MAX_SHARE_BYTES) fail('tooLarge', 'The file is too large to share in a URL')
-  const gzip = typeof CompressionStream === 'function'
-    ? await transform(source, new CompressionStream('gzip'))
-    : null
-  const encoded = gzip && gzip.byteLength < source.byteLength ? gzip : source
-  const format = encoded === gzip ? 'g' : 'u'
+  const standard = encodeBinaryPayload(input)
+  if (standard.byteLength > MAX_SHARE_BYTES) fail('tooLarge', 'The file is too large to share in a URL')
+  const sources = [standard]
+  if (!input.dataUrl && shouldPackText(input.text)) {
+    const packed = encodeBinaryPayload(input, true)
+    if (packed.byteLength < standard.byteLength) sources.push(packed)
+  }
+  const candidates: Array<{ bytes: Uint8Array; format: 'g' | 'u' }> = sources.map((bytes) => ({ bytes, format: 'u' }))
+  if (typeof CompressionStream === 'function') {
+    const compressed = await Promise.all(sources.map((source) => transform(source, new CompressionStream('gzip'))))
+    compressed.forEach((bytes) => candidates.push({ bytes, format: 'g' }))
+  }
+  const encoded = candidates.reduce((smallest, candidate) => candidate.bytes.byteLength < smallest.bytes.byteLength ? candidate : smallest)
   const url = new URL(location.href)
   url.hash = ''
   url.searchParams.set(SHARE_MARKER, '1')
-  return `${url.toString()}${SHARE_PREFIX}${format}.${bytesToBase64Url(encoded)}`
+  return `${url.toString()}${SHARE_PREFIX}${encoded.format}.${bytesToBase64Url(encoded.bytes)}`
 }
 
 export async function readFileShareHash(hash: string): Promise<SharedFile | null> {
@@ -197,7 +212,7 @@ export async function readFileShareHash(hash: string): Promise<SharedFile | null
     if (typeof DecompressionStream !== 'function') return fail('unsupportedCompression', 'This browser cannot decompress gzip share links')
     bytes = await transform(bytes, new DecompressionStream('gzip'))
   }
-  return bytes[0] === V2_MAGIC[0] && bytes[1] === V2_MAGIC[1]
+  return bytes[0] === V2_MAGIC[0] && (bytes[1] === V2_MAGIC[1] || bytes[1] === V3_MAGIC[1])
     ? decodeBinaryPayload(bytes)
     : decodeLegacyPayload(bytes)
 }
