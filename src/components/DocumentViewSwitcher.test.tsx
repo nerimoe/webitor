@@ -47,4 +47,22 @@ describe('DocumentViewSwitcher', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Show side by side' }))
     expect(onSplit).toHaveBeenCalledWith('markdown-preview')
   })
+
+  it('shows a static provider label when the other matching provider is occupied', () => {
+    const text = provider('text-editor', 'textEditorView', 100)
+    const preview = provider('markdown-preview', 'markdownPreviewView', 50)
+
+    const { container } = render(<Tooltip.Provider><DocumentViewSwitcher
+      views={[text, preview]}
+      activeViewId={text.id}
+      splitCandidates={[]}
+      unavailableViewIds={[preview.id]}
+      onSelect={vi.fn()}
+      onSplit={vi.fn()}
+    /></Tooltip.Provider>)
+
+    expect(container.querySelector('.view-mode-label')).toHaveTextContent('Text editor')
+    expect(screen.queryByRole('button', { name: 'Document view' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Show side by side' })).not.toBeInTheDocument()
+  })
 })

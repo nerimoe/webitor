@@ -23,7 +23,7 @@ export function WorkspaceDndProvider({ children }: { children: ReactNode }) {
   const nodes = useWorkspace((state) => state.nodes)
   const moveNode = useWorkspace((state) => state.moveNode)
   const reorderNode = useWorkspace((state) => state.reorderNode)
-  const openFile = useWorkspace((state) => state.openFile)
+  const openFileInPane = useWorkspace((state) => state.openFileInPane)
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null)
   const [dropHint, setDropHint] = useState<DropHint>(null)
   const hintRef = useRef<DropHint>(null)
@@ -55,11 +55,7 @@ export function WorkspaceDndProvider({ children }: { children: ReactNode }) {
     if (overId === 'editor:primary' || overId === 'editor:secondary') {
       if (nodes[nodeId]?.kind === 'file') {
         const targetGroup = overId.endsWith('secondary') ? 'secondary' : 'primary'
-        const groups = useWorkspace.getState().layout.groups
-        if (targetGroup === 'primary' && !groups[1].activeFileId && groups[0].activeFileId && groups[0].activeFileId !== nodeId) {
-          openFile(groups[0].activeFileId, 'secondary')
-        }
-        openFile(nodeId, targetGroup)
+        openFileInPane(nodeId, targetGroup)
       }
     } else if (overId === 'tree-root') {
       moveNode(nodeId, null)

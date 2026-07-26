@@ -372,7 +372,26 @@ test('switches a Markdown file between its text and preview providers', async ({
   await expect(page.locator('.cm-content')).toBeVisible()
 })
 
-test('keeps split document providers independent when the other pane switches files', async ({ page }, testInfo) => {
+test('closes the secondary pane when the viewport becomes narrow', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium')
+  await page.setViewportSize({ width: 1024, height: 768 })
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'responsive.md', mimeType: 'text/markdown', buffer: Buffer.from('# Responsive') })
+  await page.getByTestId('sidebar').getByText('responsive.md', { exact: true }).click()
+  await page.getByRole('button', { name: /Show side by side|并排显示/ }).click()
+  await expect(page.getByTestId('editor-secondary')).toBeVisible()
+
+  await page.setViewportSize({ width: 768, height: 1024 })
+  await expect(page.getByTestId('editor-secondary')).toHaveCount(0)
+  await expect(page.locator('.group-switch')).toHaveCount(0)
+  await expect(page.getByRole('tab', { name: /Text editor|文本编辑/ })).toBeVisible()
+  await expect(page.getByRole('tab', { name: /Markdown preview|Markdown 预览/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Show side by side|并排显示/ })).toHaveCount(0)
+
+  await page.setViewportSize({ width: 1024, height: 768 })
+  await expect(page.getByTestId('editor-secondary')).toHaveCount(0)
+})
+
+test('opens a file-list selection full screen from a split document', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name === 'ipad')
   await page.locator('input[type=file]').first().setInputFiles([
     { name: 'note.md', mimeType: 'text/markdown', buffer: Buffer.from('# Note') },
@@ -390,12 +409,64 @@ test('keeps split document providers independent when the other pane switches fi
   await sidebar.getByText('plain.txt', { exact: true }).click()
   await expect(page.getByTestId('shared-document-bar')).toHaveCount(0)
   await expect(page.locator('.pane-view-bar')).toHaveCount(0)
-  await expect(page.locator('.document-bar')).toHaveCount(2)
-  await expect(page.getByTestId('editor-primary').locator('.document-title')).toContainText('plain.txt')
-  await expect(page.getByTestId('editor-secondary').getByTestId('markdown-preview')).toBeVisible()
-  await page.getByTestId('editor-secondary').getByRole('button', { name: /Close pane|关闭分栏/ }).click()
   await expect(page.locator('.document-bar')).toHaveCount(1)
+  await expect(page.getByTestId('editor-primary').locator('.document-title')).toContainText('plain.txt')
+  await expect(page.getByTestId('editor-secondary')).toHaveCount(0)
   await expect(page.getByTestId('markdown-preview')).toHaveCount(0)
+  expect(await page.locator('.editor-area').evaluate((editor) => editor.scrollWidth <= editor.clientWidth)).toBe(true)
+
+  await sidebar.locator('.tree-row', { hasText: 'note.md' }).click({ button: 'right' })
+  await page.getByRole('menuitem', { name: /Open on left|在左侧打开/ }).click()
+  await expect(page.getByTestId('editor-primary').locator('.document-title')).toContainText('note.md')
+  await expect(page.getByTestId('editor-secondary').locator('.document-title')).toContainText('plain.txt')
+})
+
+test('uses the next provider when a file is dragged into the other pane', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium')
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'dragged.md', mimeType: 'text/markdown', buffer: Buffer.from('# Dragged') })
+  const sidebar = page.getByTestId('sidebar')
+  await sidebar.getByText('dragged.md', { exact: true }).click()
+  const source = sidebar.locator('.tree-row', { hasText: 'dragged.md' })
+  const sourceBox = await source.boundingBox()
+  const editorBox = await page.locator('.editor-area').boundingBox()
+  expect(sourceBox).not.toBeNull()
+  expect(editorBox).not.toBeNull()
+  await page.mouse.move(sourceBox!.x + sourceBox!.width / 2, sourceBox!.y + sourceBox!.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(sourceBox!.x + sourceBox!.width + 20, sourceBox!.y + sourceBox!.height / 2, { steps: 4 })
+  await page.mouse.move(editorBox!.x + editorBox!.width * .75, editorBox!.y + editorBox!.height / 2, { steps: 12 })
+  await expect(page.locator('.editor-split-zones > div:nth-child(2)')).toHaveClass(/active/)
+  await page.mouse.up()
+
+  await expect(page.getByTestId('editor-primary').locator('.cm-content')).toBeVisible()
+  await expect(page.getByTestId('editor-secondary').getByTestId('markdown-preview')).toBeVisible()
+  await expect(page.getByRole('button', { name: /Show side by side|并排显示/ })).toHaveCount(0)
+  await expect(page.locator('.view-mode-label')).toHaveCount(2)
+
+  await page.mouse.move(sourceBox!.x + sourceBox!.width / 2, sourceBox!.y + sourceBox!.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(sourceBox!.x + sourceBox!.width + 20, sourceBox!.y + sourceBox!.height / 2, { steps: 4 })
+  await page.mouse.move(editorBox!.x + editorBox!.width * .25, editorBox!.y + editorBox!.height / 2, { steps: 12 })
+  await expect(page.locator('.editor-split-zones > div:nth-child(1)')).toHaveClass(/active/)
+  await page.mouse.up()
+  await expect(page.getByTestId('editor-primary').getByTestId('markdown-preview')).toBeVisible()
+  await expect(page.getByTestId('editor-secondary').locator('.cm-content')).toBeVisible()
+
+  const primaryBeforeSwap = await page.getByTestId('editor-primary').boundingBox()
+  const secondaryBeforeSwap = await page.getByTestId('editor-secondary').boundingBox()
+  const separator = page.locator('.editor-resize')
+  const separatorBox = await separator.boundingBox()
+  expect(primaryBeforeSwap).not.toBeNull()
+  expect(secondaryBeforeSwap).not.toBeNull()
+  expect(separatorBox).not.toBeNull()
+  await page.mouse.dblclick(separatorBox!.x + separatorBox!.width / 2, separatorBox!.y + 180)
+  await expect(page.getByTestId('editor-primary').locator('.cm-content')).toBeVisible()
+  await expect(page.getByTestId('editor-secondary').getByTestId('markdown-preview')).toBeVisible()
+  const primaryAfterSwap = await page.getByTestId('editor-primary').boundingBox()
+  const secondaryAfterSwap = await page.getByTestId('editor-secondary').boundingBox()
+  expect(Math.abs(primaryAfterSwap!.width - primaryBeforeSwap!.width)).toBeLessThan(2)
+  expect(Math.abs(secondaryAfterSwap!.width - secondaryBeforeSwap!.width)).toBeLessThan(2)
+  expect(await page.locator('.editor-area').evaluate((editor) => editor.scrollWidth <= editor.clientWidth)).toBe(true)
 })
 
 test('moves a listed file into an existing folder', async ({ page }, testInfo) => {

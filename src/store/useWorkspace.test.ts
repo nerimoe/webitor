@@ -78,6 +78,85 @@ describe('workspace store', () => {
     expect(useWorkspace.getState().layout.groups[0].activeFileId).toBe(markdown)
   })
 
+  it('uses the next unoccupied provider when the same file opens in the other pane', () => {
+    const markdown = useWorkspace.getState().addFile('note.md', '# Note')
+    useWorkspace.getState().openFileInGroup(markdown, 'secondary')
+    const [primary, secondary] = useWorkspace.getState().layout.groups
+    expect(primary).toMatchObject({ activeFileId: markdown, view: 'text-editor' })
+    expect(secondary).toMatchObject({ activeFileId: markdown, view: 'markdown-preview' })
+    expect(() => useWorkspace.getState().setGroupView('secondary', 'text-editor')).toThrow('already open')
+  })
+
+  it('does not duplicate a single provider when the same file opens in the other pane', () => {
+    const plain = useWorkspace.getState().addFile('note.txt', 'Note')
+    useWorkspace.getState().openFileInGroup(plain, 'secondary')
+    expect(useWorkspace.getState().layout.groups[1].activeFileId).toBeNull()
+  })
+
+  it('opens a file-tree selection full screen and closes the secondary pane', () => {
+    const markdown = useWorkspace.getState().addFile('note.md', '# Note')
+    const plain = useWorkspace.getState().addFile('plain.txt', 'Plain', { open: false })
+    useWorkspace.getState().openFileInGroup(markdown, 'secondary')
+
+    useWorkspace.getState().openFileFullScreen(plain)
+
+    const [primary, secondary] = useWorkspace.getState().layout.groups
+    expect(primary).toMatchObject({ activeFileId: plain, view: 'text-editor' })
+    expect(secondary.activeFileId).toBeNull()
+  })
+
+  it('opens a newly created file full screen when no group is requested', () => {
+    const markdown = useWorkspace.getState().addFile('note.md', '# Note')
+    useWorkspace.getState().openFileInGroup(markdown, 'secondary')
+
+    const created = useWorkspace.getState().addFile('new.txt', 'New')
+
+    const [primary, secondary] = useWorkspace.getState().layout.groups
+    expect(primary.activeFileId).toBe(created)
+    expect(secondary.activeFileId).toBeNull()
+  })
+
+  it('cycles the dropped pane provider and moves its previous provider to the other pane', () => {
+    const markdown = useWorkspace.getState().addFile('note.md', '# Note')
+    useWorkspace.getState().openFileInGroup(markdown, 'secondary')
+
+    useWorkspace.getState().openFileInPane(markdown, 'primary')
+
+    const [primary, secondary] = useWorkspace.getState().layout.groups
+    expect(primary).toMatchObject({ activeFileId: markdown, view: 'markdown-preview' })
+    expect(secondary).toMatchObject({ activeFileId: markdown, view: 'text-editor' })
+  })
+
+  it('splits a full-screen document when another file is dropped on the left half', () => {
+    const existing = useWorkspace.getState().addFile('existing.txt', 'Existing')
+    const dropped = useWorkspace.getState().addFile('dropped.txt', 'Dropped', { open: false })
+
+    useWorkspace.getState().openFileInPane(dropped, 'primary')
+
+    const [primary, secondary] = useWorkspace.getState().layout.groups
+    expect(primary).toMatchObject({ activeFileId: dropped, view: 'text-editor' })
+    expect(secondary).toMatchObject({ activeFileId: existing, view: 'text-editor' })
+  })
+
+  it('does not create a second pane when a dropped file has only one provider', () => {
+    const plain = useWorkspace.getState().addFile('note.txt', 'Note')
+    useWorkspace.getState().openFileInPane(plain, 'primary')
+    expect(useWorkspace.getState().layout.groups[0]).toMatchObject({ activeFileId: plain, view: 'text-editor' })
+    expect(useWorkspace.getState().layout.groups[1].activeFileId).toBeNull()
+  })
+
+  it('swaps complete editor groups while keeping their positions and split ratio', () => {
+    const left = useWorkspace.getState().addFile('left.txt', 'Left')
+    const right = useWorkspace.getState().addFile('right.md', '# Right', { groupId: 'secondary' })
+    useWorkspace.getState().setGroupView('secondary', 'markdown-preview')
+    useWorkspace.getState().setSplitRatio(35)
+    useWorkspace.getState().swapEditorGroups()
+    const [primary, secondary] = useWorkspace.getState().layout.groups
+    expect(primary).toMatchObject({ id: 'primary', activeFileId: right, view: 'markdown-preview' })
+    expect(secondary).toMatchObject({ id: 'secondary', activeFileId: left, view: 'text-editor' })
+    expect(useWorkspace.getState().layout.splitRatio).toBe(35)
+  })
+
   it('closes either split group and promotes the remaining document', () => {
     const left = useWorkspace.getState().addFile('left.txt', 'left')
     const right = useWorkspace.getState().addFile('right.txt', 'right', { groupId: 'secondary' })
@@ -85,7 +164,7 @@ describe('workspace store', () => {
     expect(useWorkspace.getState().layout.groups[0].activeFileId).toBe(left)
     expect(useWorkspace.getState().layout.groups[1].activeFileId).toBeNull()
 
-    useWorkspace.getState().openFile(right, 'secondary')
+    useWorkspace.getState().openFileInGroup(right, 'secondary')
     useWorkspace.getState().closeGroup('primary')
     expect(useWorkspace.getState().layout.groups[0].activeFileId).toBe(right)
     expect(useWorkspace.getState().layout.groups[1].activeFileId).toBeNull()

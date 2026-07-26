@@ -9,13 +9,13 @@ describe('persisted workspace schema', () => {
     delete legacy.schemaVersion
     delete layout.editorFontSize
     delete layout.sidebarCollapsed
-    delete layout.activeMobileGroup
+    layout.activeMobileGroup = 'secondary'
 
     const restored = parsePersistedState(legacy)
-    expect(restored.schemaVersion).toBe(5)
+    expect(restored.schemaVersion).toBe(6)
     expect(restored.layout.editorFontSize).toBe(16)
     expect(restored.layout.sidebarCollapsed).toBe(false)
-    expect(restored.layout.activeMobileGroup).toBe('primary')
+    expect(restored.layout).not.toHaveProperty('activeMobileGroup')
   })
 
   it('rejects a file node without matching content', () => {
@@ -103,11 +103,36 @@ describe('persisted workspace schema', () => {
     expect(parsePersistedState(versionFour).expanded).toEqual([])
   })
 
-  it('rejects a version 5 active file that is outside its pane tabs', () => {
+  it('migrates duplicate version 5 providers to the next available view', () => {
+    const versionFive = initialPersistedState() as unknown as Record<string, unknown>
+    versionFive.schemaVersion = 5
+    const nodes = versionFive.nodes as Record<string, unknown>
+    const contents = versionFive.contents as Record<string, unknown>
+    const layout = versionFive.layout as { groups: Array<Record<string, unknown>> }
+    nodes.note = { id: 'note', parentId: null, name: 'note.md', kind: 'file', order: 0, source: 'new' }
+    contents.note = { fileId: 'note', text: '# Note', contentKind: 'text', version: 1, status: 'cached' }
+    layout.groups[0] = { id: 'primary', tabs: ['note'], activeFileId: 'note', view: 'text-editor' }
+    layout.groups[1] = { id: 'secondary', tabs: ['note'], activeFileId: 'note', view: 'text-editor' }
+
+    const restored = parsePersistedState(versionFive)
+    expect(restored.layout.groups[0].view).toBe('text-editor')
+    expect(restored.layout.groups[1].view).toBe('markdown-preview')
+  })
+
+  it('rejects a version 6 active file that is outside its pane tabs', () => {
     const invalid = initialPersistedState()
     invalid.nodes.note = { id: 'note', parentId: null, name: 'note.txt', kind: 'file', order: 0, source: 'new' }
     invalid.contents.note = { fileId: 'note', text: 'Note', contentKind: 'text', version: 1, status: 'cached' }
     invalid.layout.groups[0].activeFileId = 'note'
     expect(() => parsePersistedState(invalid)).toThrow('is not in its tabs')
+  })
+
+  it('rejects duplicate providers in the current persisted schema', () => {
+    const invalid = initialPersistedState()
+    invalid.nodes.note = { id: 'note', parentId: null, name: 'note.md', kind: 'file', order: 0, source: 'new' }
+    invalid.contents.note = { fileId: 'note', text: '# Note', contentKind: 'text', version: 1, status: 'cached' }
+    invalid.layout.groups[0] = { id: 'primary', tabs: ['note'], activeFileId: 'note', view: 'text-editor' }
+    invalid.layout.groups[1] = { id: 'secondary', tabs: ['note'], activeFileId: 'note', view: 'text-editor' }
+    expect(() => parsePersistedState(invalid)).toThrow('Both editor groups use view')
   })
 })

@@ -46,7 +46,7 @@ export default function App() {
   const addFile = useWorkspace((state) => state.addFile)
   const setSidebarOpen = useWorkspace((state) => state.setSidebarOpen)
   const setSidebarCollapsed = useWorkspace((state) => state.setSidebarCollapsed)
-  const setActiveMobileGroup = useWorkspace((state) => state.setActiveMobileGroup)
+  const closeGroup = useWorkspace((state) => state.closeGroup)
   const setSidebarWidth = useWorkspace((state) => state.setSidebarWidth)
   const setSplitRatio = useWorkspace((state) => state.setSplitRatio)
   const setNotice = useWorkspace((state) => state.setNotice)
@@ -58,6 +58,7 @@ export default function App() {
   const sidebarDragCleanup = useRef<(() => void) | null>(null)
   const hydrationStarted = useRef(false)
   const narrow = useNarrow()
+  const secondaryFileId = layout.groups[1].activeFileId
   const [sidebarAnimating, setSidebarAnimating] = useState(false)
   const [dragTarget, setDragTarget] = useState<'tree' | 'editor' | null>(null)
   const [shareImportProgress, setShareImportProgress] = useState<ShareLinkProgress | null>(() => hasFileShareMarker() ? { phase: 'downloading' } : null)
@@ -77,7 +78,7 @@ export default function App() {
       setShareImportProgress({ phase: 'downloading' })
       void readFileShareUrl(href, setShareImportProgress).then((shared) => {
         setShareImportProgress(null)
-        return importItems([{ kind: 'decoded', ...shared, source: 'drop' }], 'primary')
+        return importItems([{ kind: 'decoded', ...shared, source: 'drop' }], 'fullscreen')
       }).catch((error) => {
         setShareImportProgress(null)
         if (!(error instanceof ShareLinkError)) { setNotice('sharedFileCorrupt'); return }
@@ -110,6 +111,9 @@ export default function App() {
     document.documentElement.lang = settings.locale
   }, [settings])
   useEffect(() => { folderInput.current?.setAttribute('webkitdirectory', '') }, [])
+  useEffect(() => {
+    if (hydrated && narrow && secondaryFileId) closeGroup('secondary')
+  }, [closeGroup, hydrated, narrow, secondaryFileId])
   useEffect(() => {
     if (!hydrated || narrow || restoredSidebarCollapse.current) return
     restoredSidebarCollapse.current = true
@@ -155,7 +159,7 @@ export default function App() {
 
   const createQuickDocument = () => addFile('untitled.txt', '')
 
-  const fromInput = (files: FileList | null, target: ImportTarget = false) => {
+  const fromInput = (files: FileList | null, target: ImportTarget = 'list') => {
     if (!files) return
     void importItems(Array.from(files).map((file): ImportItem => ({ kind: 'file', file, path: (file as File & { webkitRelativePath?: string }).webkitRelativePath?.split('/').slice(0, -1).filter(Boolean) })), target)
   }
@@ -163,7 +167,7 @@ export default function App() {
     if (window.showOpenFilePicker) {
       try {
         const handles = await window.showOpenFilePicker({ multiple: true })
-        await importItems(await Promise.all(handles.map(async (handle): Promise<ImportItem> => ({ kind: 'file', file: await handle.getFile(), handle }))), false)
+        await importItems(await Promise.all(handles.map(async (handle): Promise<ImportItem> => ({ kind: 'file', file: await handle.getFile(), handle }))), 'list')
       } catch (error) { if (!(error instanceof DOMException && error.name === 'AbortError')) setNotice('importFailed') }
     } else fileInput.current?.click()
   }
@@ -175,7 +179,7 @@ export default function App() {
         await importItems([
           { kind: 'directory', path: [handle.name] },
           ...entries.map((entry) => ({ kind: 'file' as const, ...entry, path: [handle.name, ...entry.path] }))
-        ], false)
+        ], 'list')
       } catch (error) { if (!(error instanceof DOMException && error.name === 'AbortError')) setNotice('importFailed') }
     } else folderInput.current?.click()
   }
@@ -210,7 +214,7 @@ export default function App() {
             if (collapsed !== layout.sidebarCollapsed) setSidebarCollapsed(collapsed)
             if (!collapsed) setSidebarWidth(size.inPixels)
           }}>
-            <div className={`drop-region sidebar-region ${dragTarget === 'tree' ? 'drag-active' : ''}`} onDragEnter={(e) => { if (e.dataTransfer.types.includes('Files')) setDragTarget('tree') }} onDragOver={(e) => e.preventDefault()} onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragTarget(null) }} onDrop={(e) => handleDrop(e, false)}>
+            <div className={`drop-region sidebar-region ${dragTarget === 'tree' ? 'drag-active' : ''}`} onDragEnter={(e) => { if (e.dataTransfer.types.includes('Files')) setDragTarget('tree') }} onDragOver={(e) => e.preventDefault()} onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragTarget(null) }} onDrop={(e) => handleDrop(e, 'list')}>
               <Sidebar onImportFiles={() => void pickFiles()} onImportFolder={() => void pickFolder()} onCollapse={() => animateSidebar('collapse')} />
               {dragTarget === 'tree' && <div className="drop-overlay"><PanelLeft size={26} />{t('dropTree')}</div>}
             </div>
@@ -224,16 +228,13 @@ export default function App() {
             onDragEnter={(event) => { if (event.dataTransfer.types.includes('Files')) setDragTarget('editor') }}
             onDragOver={(event) => event.preventDefault()}
             onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragTarget(null) }}
-            onDrop={(event) => handleDrop(event, 'active')}>
-            <EditorPane group={editorGroups.find((group) => group.id === layout.activeMobileGroup) ?? editorGroups[0]} onNewDocument={createQuickDocument} onImportFiles={() => void pickFiles()} leading={<>
+            onDrop={(event) => handleDrop(event, 'fullscreen')}>
+            <EditorPane group={editorGroups[0]} allowSplit={false} onNewDocument={createQuickDocument} onImportFiles={() => void pickFiles()} leading={<>
               <IconButton icon={layout.sidebarOpen ? X : Menu} label={t('files')} onClick={() => setSidebarOpen(!layout.sidebarOpen)} />
-              {hasSecondary && <div className="group-switch" role="tablist" aria-label={t('editor')}>
-                {editorGroups.map((group, index) => <button key={group.id} className={layout.activeMobileGroup === group.id ? 'active' : ''} onClick={() => setActiveMobileGroup(group.id)}>{index + 1}</button>)}
-              </div>}
             </>} />
             {dragTarget === 'editor' && <div className="drop-overlay editor-drop"><Upload size={28} />{t('dropEditor')}</div>}
           </div>
-          {layout.sidebarOpen && <><button className="drawer-scrim" aria-label={t('close')} onClick={() => setSidebarOpen(false)} /><div className="sidebar-drawer"><Sidebar onImportFiles={() => void pickFiles()} onImportFolder={() => void pickFolder()} /></div></>}
+          {layout.sidebarOpen && <><button className="drawer-scrim" aria-label={t('close')} onClick={() => setSidebarOpen(false)} /><div className="sidebar-drawer"><Sidebar allowSplit={false} onImportFiles={() => void pickFiles()} onImportFolder={() => void pickFolder()} /></div></>}
         </>}
       </main>
       {shareImportProgress && <TransferStatus className="global-transfer-status" label={t(`sharePhase_${shareImportProgress.phase}`)} progress={shareImportProgress.progress} />}
@@ -272,24 +273,28 @@ function EditorArea({ groups, hasSecondary, splitRatio, setSplitRatio, onDrop, d
   leading?: ReactNode
 }) {
   const { t } = useTranslation()
+  const swapEditorGroups = useWorkspace((state) => state.swapEditorGroups)
   const hasDocument = Boolean(groups[0].activeFileId || groups[1].activeFileId)
   const sharedFileId = hasSecondary && groups[0].activeFileId === groups[1].activeFileId ? groups[0].activeFileId : null
   const dropTo = (event: React.DragEvent, target: ImportTarget) => onDrop(event, target)
   const editorContent = hasSecondary ? <Group orientation="horizontal" id="editor-layout" resizeTargetMinimumSize={RESIZE_TARGET_SIZE} onLayoutChanged={(value, meta) => { if (meta.isUserInteraction) setSplitRatio(value.primary ?? splitRatio) }}>
       <Panel id="primary" defaultSize={splitRatio} minSize="25%"><EditorPane group={groups[0]} leading={sharedFileId ? undefined : leading} onNewDocument={onNewDocument} onImportFiles={onImportFiles} viewOnlyHeader={Boolean(sharedFileId)} /></Panel>
-      <Separator className="resize-handle editor-resize" onPointerDown={captureResizePointer} />
+      <Separator className="resize-handle editor-resize" disableDoubleClick onPointerDown={captureResizePointer} onDoubleClick={(event) => {
+        event.preventDefault()
+        swapEditorGroups()
+      }} />
       <Panel id="secondary" defaultSize={100 - splitRatio} minSize="25%"><EditorPane group={groups[1]} onNewDocument={onNewDocument} onImportFiles={onImportFiles} viewOnlyHeader={Boolean(sharedFileId)} /></Panel>
     </Group> : <EditorPane group={groups[0]} leading={leading} onNewDocument={onNewDocument} onImportFiles={onImportFiles} />
-  return <div className={`editor-area ${sharedFileId ? 'shared-document-layout' : ''} ${dragActive ? 'drag-active' : ''}`} onDragEnter={(event) => { if (event.dataTransfer.types.includes('Files')) setDragTarget('editor') }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragTarget(null) }} onDrop={(event) => dropTo(event, hasDocument ? 'single' : 'active')}>
+  return <div className={`editor-area ${sharedFileId ? 'shared-document-layout' : ''} ${dragActive ? 'drag-active' : ''}`} onDragEnter={(event) => { if (event.dataTransfer.types.includes('Files')) setDragTarget('editor') }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragTarget(null) }} onDrop={(event) => dropTo(event, 'fullscreen')}>
     {sharedFileId ? <>
       <DocumentHeader fileId={sharedFileId} leading={leading} shared />
       <div className="shared-editor-body">{editorContent}</div>
       <DocumentStatusBar fileId={sharedFileId} shared />
     </> : editorContent}
     {dragActive && (hasDocument ? <div className="external-editor-drop-zones">
-      <div className="external-drop-left" onDragEnter={(event) => event.currentTarget.classList.add('active')} onDragLeave={(event) => event.currentTarget.classList.remove('active')} onDragOver={(event) => event.preventDefault()} onDrop={(event) => dropTo(event, 'primary')}>{t('openLeft')}</div>
-      <div className="external-drop-right" onDragEnter={(event) => event.currentTarget.classList.add('active')} onDragLeave={(event) => event.currentTarget.classList.remove('active')} onDragOver={(event) => event.preventDefault()} onDrop={(event) => dropTo(event, 'secondary')}>{t('openRightDrop')}</div>
-      <div className="external-drop-single" onDragEnter={(event) => event.currentTarget.classList.add('active')} onDragLeave={(event) => event.currentTarget.classList.remove('active')} onDragOver={(event) => event.preventDefault()} onDrop={(event) => dropTo(event, 'single')}><Upload size={22} />{t('dropOpenSingle')}</div>
+      <div className="external-drop-left" onDragEnter={(event) => event.currentTarget.classList.add('active')} onDragLeave={(event) => event.currentTarget.classList.remove('active')} onDragOver={(event) => event.preventDefault()} onDrop={(event) => dropTo(event, 'left')}>{t('openLeft')}</div>
+      <div className="external-drop-right" onDragEnter={(event) => event.currentTarget.classList.add('active')} onDragLeave={(event) => event.currentTarget.classList.remove('active')} onDragOver={(event) => event.preventDefault()} onDrop={(event) => dropTo(event, 'right')}>{t('openRightDrop')}</div>
+      <div className="external-drop-single" onDragEnter={(event) => event.currentTarget.classList.add('active')} onDragLeave={(event) => event.currentTarget.classList.remove('active')} onDragOver={(event) => event.preventDefault()} onDrop={(event) => dropTo(event, 'fullscreen')}><Upload size={22} />{t('dropOpenSingle')}</div>
     </div> : <div className="drop-overlay editor-drop"><Upload size={28} />{t('dropEditor')}</div>)}
     <EditorDropZones />
   </div>

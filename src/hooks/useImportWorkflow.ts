@@ -3,7 +3,7 @@ import { ImportFileError, readImportFile, type ImportFileFailure } from '../lib/
 import { useWorkspace } from '../store/useWorkspace'
 import type { FileContent, FileNode } from '../types'
 
-export type ImportTarget = false | 'active' | 'primary' | 'secondary' | 'single'
+export type ImportTarget = 'list' | 'left' | 'right' | 'fullscreen'
 export type ConflictChoice = 'overwrite' | 'copy' | 'skip'
 
 export type ImportItem =
@@ -26,22 +26,18 @@ function ensureFolders(path: string[]) {
   return parentId
 }
 
-function openImportedFile(fileId: string, target: Exclude<ImportTarget, false>) {
+function openImportedFile(fileId: string, target: Exclude<ImportTarget, 'list'>) {
   const workspace = useWorkspace.getState()
-  if (target === 'single') {
-    workspace.closeSecondary()
-    useWorkspace.getState().openFile(fileId, 'primary')
+  if (target === 'fullscreen') {
+    workspace.openFileFullScreen(fileId)
     return
   }
-  if (target === 'primary') {
-    const groups = workspace.layout.groups
-    if (!groups[1].activeFileId && groups[0].activeFileId && groups[0].activeFileId !== fileId) {
-      workspace.openFile(groups[0].activeFileId, 'secondary')
-    }
-    useWorkspace.getState().openFile(fileId, 'primary')
+  if (target === 'left' || target === 'right') {
+    workspace.openFileInPane(fileId, target === 'left' ? 'primary' : 'secondary')
     return
   }
-  workspace.openFile(fileId, target === 'secondary' ? 'secondary' : workspace.layout.activeMobileGroup)
+  const unsupportedTarget: never = target
+  throw new Error(`Unsupported import target: ${unsupportedTarget}`)
 }
 
 export function useImportWorkflow() {
@@ -127,14 +123,14 @@ export function useImportWorkflow() {
       firstImportedId ??= fileId
     }
 
-    if (target && firstImportedId) openImportedFile(firstImportedId, target)
+    if (target !== 'list' && firstImportedId) openImportedFile(firstImportedId, target)
     if (failures.has('permissionDenied')) useWorkspace.getState().setNotice('permissionDenied')
     else if (failures.has('fileReadFailed')) useWorkspace.getState().setNotice('fileReadFailed')
     else if (failures.has('unsupported')) useWorkspace.getState().setNotice('unsupported')
     return firstImportedId
   }, [askConflict])
 
-  const importItems = useCallback((items: ImportItem[], target: ImportTarget = false) => {
+  const importItems = useCallback((items: ImportItem[], target: ImportTarget = 'list') => {
     const job = queue.current.then(() => processItems(items, target))
     // Keep later imports serial after a failed job while returning this job's rejection to its caller.
     queue.current = job.then(() => undefined, () => undefined)

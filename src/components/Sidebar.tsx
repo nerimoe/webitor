@@ -12,10 +12,11 @@ import { useActionOverflow } from './useActionOverflow'
 
 const PULL_SEARCH_THRESHOLD = 72
 
-export function Sidebar({ onImportFiles, onImportFolder, onCollapse }: {
+export function Sidebar({ onImportFiles, onImportFolder, onCollapse, allowSplit = true }: {
   onImportFiles: () => void
   onImportFolder: () => void
   onCollapse?: () => void
+  allowSplit?: boolean
 }) {
   const { t } = useTranslation()
   const nodes = useWorkspace((state) => state.nodes)
@@ -131,7 +132,7 @@ export function Sidebar({ onImportFiles, onImportFolder, onCollapse }: {
       <div ref={treeScroll} className="tree-scroll">
         <div className={`pull-search-indicator ${pullOffset >= PULL_SEARCH_THRESHOLD ? 'ready' : ''}`} style={{ opacity: Math.min(1, pullOffset / 48) }} aria-hidden="true"><Search size={22} /></div>
         <div className={`tree-pull-content ${pulling ? 'pulling' : ''}`} style={{ transform: pullOffset ? `translateY(${pullOffset}px)` : undefined }}>
-          {Object.keys(nodes).length ? <FileTree /> : <div className="tree-empty">{t('emptyFileList')}</div>}
+          {Object.keys(nodes).length ? <FileTree allowSplit={allowSplit} /> : <div className="tree-empty">{t('emptyFileList')}</div>}
         </div>
       </div>
       <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />

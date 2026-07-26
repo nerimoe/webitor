@@ -24,7 +24,6 @@ export const initialPersistedState = (): PersistedState => ({
     editorFontSize: 16,
     sidebarOpen: false,
     sidebarCollapsed: false,
-    activeMobileGroup: 'primary',
     groups: [
       { id: 'primary', tabs: [], activeFileId: null, view: 'text-editor' },
       { id: 'secondary', tabs: [], activeFileId: null, view: 'text-editor' }
@@ -49,15 +48,16 @@ interface WorkspaceStore extends PersistedState {
   moveNode: (nodeId: string, parentId: string | null) => void
   reorderNode: (nodeId: string, parentId: string | null, targetId: string, position: 'before' | 'after') => void
   toggleExpanded: (nodeId: string) => void
-  openFile: (fileId: string, groupId?: EditorGroup['id']) => void
+  openFileInGroup: (fileId: string, groupId: EditorGroup['id']) => void
+  openFileFullScreen: (fileId: string) => void
+  openFileInPane: (fileId: string, groupId: EditorGroup['id']) => void
   openFileView: (fileId: string, groupId: EditorGroup['id'], viewId: string) => void
   closeTab: (fileId: string, groupId: EditorGroup['id']) => void
   updateContent: (fileId: string, text: string) => void
   saveFile: (fileId: string, forceDialog?: boolean) => Promise<void>
   setGroupView: (groupId: EditorGroup['id'], view: EditorGroup['view']) => void
+  swapEditorGroups: () => void
   moveTab: (fileId: string, from: EditorGroup['id'], to: EditorGroup['id']) => void
-  closeSecondary: () => void
-  closePrimary: () => void
   closeGroup: (groupId: EditorGroup['id']) => void
   restoreRevision: (fileId: string, revisionId: string) => void
   setPendingReveal: (reveal: WorkspaceStore['pendingReveal']) => void
@@ -65,7 +65,6 @@ interface WorkspaceStore extends PersistedState {
   setLocale: (locale: Locale) => void
   setSidebarOpen: (open: boolean) => void
   setSidebarCollapsed: (collapsed: boolean) => void
-  setActiveMobileGroup: (group: EditorGroup['id']) => void
   setSidebarWidth: (width: number) => void
   setSplitRatio: (ratio: number) => void
   setEditorFontSize: (size: number) => void
@@ -132,6 +131,15 @@ function viewForFile(state: Pick<WorkspaceStore, 'nodes' | 'contents'>, fileId: 
   const input = documentMatch(state, fileId)
   const views = resolveDocumentViews(input).views
   return preferred && views.some((view) => view.id === preferred) ? preferred : defaultDocumentViewId(input)
+}
+
+function unoccupiedViewForGroup(state: Pick<WorkspaceStore, 'nodes' | 'contents' | 'layout'>, fileId: string, groupId: EditorGroup['id'], preferred?: string) {
+  const views = resolveDocumentViews(documentMatch(state, fileId)).views
+  const other = state.layout.groups.find((group) => group.id !== groupId)
+  const occupiedView = other?.activeFileId === fileId ? other.view : null
+  const available = views.filter((view) => view.id !== occupiedView)
+  if (preferred && available.some((view) => view.id === preferred)) return preferred
+  return available[0]?.id ?? null
 }
 
 export const useWorkspace = create<WorkspaceStore>((set, get) => ({
@@ -208,7 +216,10 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
       selectedNodeId: fileId,
       workspace: { ...current.workspace, updatedAt: now() }
     }))
-    if (options.open !== false) get().openFile(fileId, options.groupId)
+    if (options.open !== false) {
+      if (options.groupId) get().openFileInGroup(fileId, options.groupId)
+      else get().openFileFullScreen(fileId)
+    }
     void get().persist()
     return fileId
   },
@@ -304,20 +315,103 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
     if (get().nodes[nodeId]?.kind !== 'directory') throw new Error(`Cannot expand missing directory ${nodeId}`)
     set((state) => ({ expanded: state.expanded.includes(nodeId) ? state.expanded.filter((id) => id !== nodeId) : [...state.expanded, nodeId] }))
   },
-  openFile: (fileId, groupId = 'primary') => {
+  openFileInGroup: (fileId, groupId) => {
     if (get().nodes[fileId]?.kind !== 'file') throw new Error(`Cannot open missing file ${fileId}`)
-    get().openFileView(fileId, groupId, viewForFile(get(), fileId))
+    const view = unoccupiedViewForGroup(get(), fileId, groupId)
+    if (view) get().openFileView(fileId, groupId, view)
+  },
+  openFileFullScreen: (fileId) => {
+    const state = get()
+    if (state.nodes[fileId]?.kind !== 'file') throw new Error(`Cannot open missing file ${fileId}`)
+    const view = defaultDocumentViewId(documentMatch(state, fileId))
+    set((current) => {
+      const [primary, secondary] = current.layout.groups
+      return {
+        layout: {
+          ...current.layout,
+          sidebarOpen: false,
+          groups: [
+            { ...primary, tabs: primary.tabs.includes(fileId) ? primary.tabs : [...primary.tabs, fileId], activeFileId: fileId, view },
+            { ...secondary, activeFileId: null, view: 'text-editor' }
+          ]
+        },
+        selectedNodeId: fileId
+      }
+    })
+    void get().persist()
+  },
+  openFileInPane: (fileId, groupId) => {
+    const state = get()
+    if (state.nodes[fileId]?.kind !== 'file') throw new Error(`Cannot open missing file ${fileId}`)
+    const target = state.layout.groups.find((group) => group.id === groupId)
+    if (!target) throw new Error(`Cannot drop into missing editor group ${groupId}`)
+    const other = state.layout.groups.find((group) => group.id !== groupId)
+    if (!other) throw new Error(`Cannot find the editor group opposite ${groupId}`)
+    if (target.activeFileId !== fileId) {
+      const view = unoccupiedViewForGroup(state, fileId, groupId)
+      if (!view) return
+      set((current) => {
+        const groups = current.layout.groups.map((group) => {
+          if (group.id === groupId) return {
+            ...group,
+            tabs: group.tabs.includes(fileId) ? group.tabs : [...group.tabs, fileId],
+            activeFileId: fileId,
+            view
+          }
+          if (group.id === other.id && groupId === 'primary' && !other.activeFileId && target.activeFileId) return {
+            ...group,
+            tabs: group.tabs.includes(target.activeFileId) ? group.tabs : [...group.tabs, target.activeFileId],
+            activeFileId: target.activeFileId,
+            view: target.view
+          }
+          return group
+        }) as [EditorGroup, EditorGroup]
+        return {
+          layout: { ...current.layout, groups, sidebarOpen: false },
+          selectedNodeId: fileId
+        }
+      })
+      void get().persist()
+      return
+    }
+
+    const views = resolveDocumentViews(documentMatch(state, fileId)).views
+    if (views.length < 2) return
+    const currentIndex = views.findIndex((view) => view.id === target.view)
+    if (currentIndex < 0) throw new Error(`View ${target.view} does not support file ${fileId}`)
+    const nextView = views[(currentIndex + 1) % views.length]
+    const displacedView = target.view
+
+    set((current) => {
+      const groups = current.layout.groups.map((group) => {
+        if (group.id === groupId) return { ...group, view: nextView.id }
+        if (group.id === other.id) return {
+          ...group,
+          tabs: group.tabs.includes(fileId) ? group.tabs : [...group.tabs, fileId],
+          activeFileId: fileId,
+          view: displacedView
+        }
+        throw new Error(`Unexpected editor group ${group.id}`)
+      }) as [EditorGroup, EditorGroup]
+      return {
+        layout: { ...current.layout, groups, sidebarOpen: false },
+        selectedNodeId: fileId
+      }
+    })
+    void get().persist()
   },
   openFileView: (fileId, groupId, viewId) => {
     if (get().nodes[fileId]?.kind !== 'file') throw new Error(`Cannot open missing file ${fileId}`)
     const available = resolveDocumentViews(documentMatch(get(), fileId)).views
     if (!available.some((view) => view.id === viewId)) throw new Error(`View ${viewId} does not support file ${fileId}`)
+    const other = get().layout.groups.find((group) => group.id !== groupId)
+    if (other?.activeFileId === fileId && other.view === viewId) throw new Error(`View ${viewId} is already open for file ${fileId}`)
     set((state) => {
       const groups = state.layout.groups.map((group) => {
         if (group.id === groupId) return { ...group, tabs: group.tabs.includes(fileId) ? group.tabs : [...group.tabs, fileId], activeFileId: fileId, view: viewId }
         return group
       }) as [EditorGroup, EditorGroup]
-      return { layout: { ...state.layout, groups, activeMobileGroup: groupId, sidebarOpen: false }, selectedNodeId: fileId }
+      return { layout: { ...state.layout, groups, sidebarOpen: false }, selectedNodeId: fileId }
     })
     void get().persist()
   },
@@ -442,42 +536,32 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
         if (!group.activeFileId) throw new Error(`Cannot set a view on empty group ${groupId}`)
         const views = resolveDocumentViews(documentMatch(state, group.activeFileId)).views
         if (!views.some((candidate) => candidate.id === view)) throw new Error(`View ${view} does not support file ${group.activeFileId}`)
+        const other = state.layout.groups.find((candidate) => candidate.id !== groupId)
+        if (other?.activeFileId === group.activeFileId && other.view === view) throw new Error(`View ${view} is already open for file ${group.activeFileId}`)
         return { ...group, view }
       }) as [EditorGroup, EditorGroup]
     }
   })),
+  swapEditorGroups: () => {
+    set((state) => {
+      const [primary, secondary] = state.layout.groups
+      if (!secondary.activeFileId) return state
+      return {
+        layout: {
+          ...state.layout,
+          groups: [
+            { ...secondary, id: 'primary' },
+            { ...primary, id: 'secondary' }
+          ]
+        }
+      }
+    })
+    void get().persist()
+  },
   moveTab: (fileId, from, to) => {
     get().closeTab(fileId, from)
-    get().openFile(fileId, to)
+    get().openFileInGroup(fileId, to)
   },
-  closeSecondary: () => set((state) => ({
-    layout: {
-      ...state.layout,
-      activeMobileGroup: 'primary',
-      groups: [state.layout.groups[0], { ...state.layout.groups[1], activeFileId: null, view: 'text-editor' }]
-    }
-  })),
-  closePrimary: () => set((state) => {
-    const secondary = state.layout.groups[1]
-    if (!secondary.activeFileId) return state
-    return {
-      layout: {
-        ...state.layout,
-        activeMobileGroup: 'primary',
-        groups: [
-          {
-            ...secondary,
-            id: 'primary',
-            tabs: secondary.tabs.includes(secondary.activeFileId)
-              ? secondary.tabs
-              : [...secondary.tabs, secondary.activeFileId]
-          },
-          { id: 'secondary', tabs: [], activeFileId: null, view: 'text-editor' }
-        ]
-      },
-      selectedNodeId: secondary.activeFileId
-    }
-  }),
   closeGroup: (groupId) => {
     set((state) => {
       const [primary, secondary] = state.layout.groups
@@ -485,7 +569,6 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
         return {
           layout: {
             ...state.layout,
-            activeMobileGroup: 'primary',
             groups: [
               {
                 ...secondary,
@@ -502,7 +585,7 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
       }
       if (groupId === 'secondary') {
         return {
-          layout: { ...state.layout, activeMobileGroup: 'primary', groups: [primary, { ...secondary, activeFileId: null, view: 'text-editor' }] },
+          layout: { ...state.layout, groups: [primary, { ...secondary, activeFileId: null, view: 'text-editor' }] },
           selectedNodeId: primary.activeFileId
         }
       }
@@ -525,7 +608,6 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
     set((state) => ({ layout: { ...state.layout, sidebarCollapsed } }))
     void get().persist()
   },
-  setActiveMobileGroup: (activeMobileGroup) => set((state) => ({ layout: { ...state.layout, activeMobileGroup } })),
   setSidebarWidth: (sidebarWidth) => set((state) => ({ layout: { ...state.layout, sidebarWidth } })),
   setSplitRatio: (splitRatio) => set((state) => ({ layout: { ...state.layout, splitRatio } })),
   setEditorFontSize: (editorFontSize) => {

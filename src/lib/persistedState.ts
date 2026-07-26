@@ -1,8 +1,9 @@
 import type { EditorGroup, FileContent, FileNode, FileRevision, Locale, PersistedState, PersistedSettings, Workspace } from '../types'
+import { resolveDocumentViews } from '../documentFormats/registry'
 import { dataUrlToBytes } from './files'
 import { assertWorkspaceNodes, uniqueSiblingName } from './workspaceInvariant'
 
-export const PERSISTED_STATE_VERSION = 5
+export const PERSISTED_STATE_VERSION = 6
 
 type JsonRecord = Record<string, unknown>
 
@@ -168,12 +169,6 @@ function parseGroup(value: unknown, expectedId: EditorGroup['id'], nodes: Record
   return { id: expectedId, tabs, activeFileId, view }
 }
 
-function parseActiveMobileGroup(value: unknown, legacy: boolean): EditorGroup['id'] {
-  if (legacy && value === undefined) return 'primary'
-  if (value === 'primary' || value === 'secondary') return value
-  throw new Error('layout.activeMobileGroup is invalid')
-}
-
 function parseSettings(value: unknown): PersistedSettings {
   const source = record(value, 'settings')
   const theme = string(source.theme, 'settings.theme')
@@ -186,7 +181,7 @@ function parseSettings(value: unknown): PersistedSettings {
 export function parsePersistedState(value: unknown): PersistedState {
   const source = record(value, 'persisted state')
   const version = source.schemaVersion === undefined ? 0 : number(source.schemaVersion, 'schemaVersion')
-  if (version !== 0 && version !== 1 && version !== 2 && version !== 3 && version !== 4 && version !== PERSISTED_STATE_VERSION) throw new Error(`Unsupported persisted state version: ${version}`)
+  if (version !== 0 && version !== 1 && version !== 2 && version !== 3 && version !== 4 && version !== 5 && version !== PERSISTED_STATE_VERSION) throw new Error(`Unsupported persisted state version: ${version}`)
   const legacy = version < PERSISTED_STATE_VERSION
   const nodes = parseNodes(source.nodes, legacy)
   const contents = parseContents(source.contents, nodes, legacy)
@@ -199,6 +194,27 @@ export function parsePersistedState(value: unknown): PersistedState {
     : rawExpanded
   assertNoDuplicates(expanded, 'expanded')
   expanded.forEach((id) => { if (nodes[id]?.kind !== 'directory') throw new Error(`Expanded list references missing directory ${id}`) })
+
+  const groups = [parseGroup(rawGroups[0], 'primary', nodes, legacy), parseGroup(rawGroups[1], 'secondary', nodes, legacy)] as [EditorGroup, EditorGroup]
+  groups.forEach((group, index) => {
+    if (!group.activeFileId) return
+    const node = nodes[group.activeFileId]
+    const content = contents[group.activeFileId]
+    const views = resolveDocumentViews({ name: node.name, mimeType: content.mimeType, contentKind: content.contentKind }).views
+    if (views.some((view) => view.id === group.view)) return
+    if (!legacy) throw new Error(`Editor group ${group.id} uses unsupported view ${group.view}`)
+    groups[index] = { ...group, view: views[0].id }
+  })
+  if (groups[0].activeFileId && groups[0].activeFileId === groups[1].activeFileId && groups[0].view === groups[1].view) {
+    if (!legacy) throw new Error(`Both editor groups use view ${groups[0].view} for file ${groups[0].activeFileId}`)
+    const fileId = groups[0].activeFileId
+    const node = nodes[fileId]
+    const content = contents[fileId]
+    const alternative = resolveDocumentViews({ name: node.name, mimeType: content.mimeType, contentKind: content.contentKind }).views.find((view) => view.id !== groups[0].view)
+    groups[1] = alternative
+      ? { ...groups[1], view: alternative.id }
+      : { ...groups[1], activeFileId: null, view: 'text-editor' }
+  }
 
   return {
     schemaVersion: PERSISTED_STATE_VERSION,
@@ -213,8 +229,7 @@ export function parsePersistedState(value: unknown): PersistedState {
       editorFontSize: legacy && layout.editorFontSize === undefined ? 16 : number(layout.editorFontSize, 'layout.editorFontSize'),
       sidebarOpen: boolean(layout.sidebarOpen, 'layout.sidebarOpen'),
       sidebarCollapsed: legacy && layout.sidebarCollapsed === undefined ? false : boolean(layout.sidebarCollapsed, 'layout.sidebarCollapsed'),
-      activeMobileGroup: parseActiveMobileGroup(layout.activeMobileGroup, legacy),
-      groups: [parseGroup(rawGroups[0], 'primary', nodes, legacy), parseGroup(rawGroups[1], 'secondary', nodes, legacy)]
+      groups
     },
     settings: parseSettings(source.settings)
   }

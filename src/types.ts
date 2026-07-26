@@ -57,7 +57,6 @@ export interface PersistedLayout {
   editorFontSize: number
   sidebarOpen: boolean
   sidebarCollapsed: boolean
-  activeMobileGroup: 'primary' | 'secondary'
   groups: [EditorGroup, EditorGroup]
 }
 
@@ -67,7 +66,7 @@ export interface PersistedSettings {
 }
 
 export interface PersistedState {
-  schemaVersion: 5
+  schemaVersion: 6
   workspace: Workspace
   nodes: Record<string, FileNode>
   contents: Record<string, FileContent>

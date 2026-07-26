@@ -7,9 +7,9 @@ import { useWorkspace } from '../store/useWorkspace'
 import type { FileNode } from '../types'
 import { useWorkspaceDrag } from './WorkspaceDnd'
 
-function TreeRow({ node, depth }: { node: FileNode; depth: number }) {
+function TreeRow({ node, depth, allowSplit }: { node: FileNode; depth: number; allowSplit: boolean }) {
   const { t } = useTranslation()
-  const { nodes, expanded, openFile, toggleExpanded, renameNode, deleteNode } = useWorkspace()
+  const { nodes, expanded, openFileFullScreen, openFileInPane, toggleExpanded, renameNode, deleteNode } = useWorkspace()
   const secondaryFileId = useWorkspace((state) => state.layout.groups[1].activeFileId)
   const selectedNodeId = useWorkspace((state) => state.selectedNodeId)
   const setSelectedNodeId = useWorkspace((state) => state.setSelectedNodeId)
@@ -92,8 +92,8 @@ function TreeRow({ node, depth }: { node: FileNode; depth: number }) {
           style={{ paddingInlineStart: 8 + depth * 16, transform: swipeOffset ? `translateX(${swipeOffset}px)` : undefined }}
           {...attributes}
           tabIndex={0}
-          onClick={(event) => { if (suppressClick.current) { event.preventDefault(); return }; setSelectedNodeId(node.id); node.kind === 'directory' ? toggleExpanded(node.id) : openFile(node.id) }}
-          onDoubleClick={() => node.kind === 'file' && openFile(node.id)}
+          onClick={(event) => { if (suppressClick.current) { event.preventDefault(); return }; setSelectedNodeId(node.id); node.kind === 'directory' ? toggleExpanded(node.id) : openFileFullScreen(node.id) }}
+          onDoubleClick={() => node.kind === 'file' && openFileFullScreen(node.id)}
           onContextMenu={() => setSelectedNodeId(node.id)}
           onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === 'F2') { event.preventDefault(); rename() }
@@ -114,22 +114,23 @@ function TreeRow({ node, depth }: { node: FileNode; depth: number }) {
       </ContextMenu.Trigger>
       <ContextMenu.Portal>
         <ContextMenu.Content className="menu-content">
-          {node.kind === 'file' && <ContextMenu.Item className="menu-item" onSelect={() => openFile(node.id)}>{t('open')}</ContextMenu.Item>}
-          {node.kind === 'file' && <ContextMenu.Item className="menu-item" onSelect={() => openFile(node.id, 'secondary')}>{t(secondaryFileId ? 'replaceRight' : 'openRight', { name: node.name })}</ContextMenu.Item>}
+          {node.kind === 'file' && <ContextMenu.Item className="menu-item" onSelect={() => openFileFullScreen(node.id)}>{t('open')}</ContextMenu.Item>}
+          {node.kind === 'file' && allowSplit && <ContextMenu.Item className="menu-item" onSelect={() => openFileInPane(node.id, 'primary')}>{t('openLeft')}</ContextMenu.Item>}
+          {node.kind === 'file' && allowSplit && <ContextMenu.Item className="menu-item" onSelect={() => openFileInPane(node.id, 'secondary')}>{t(secondaryFileId ? 'replaceRight' : 'openRight', { name: node.name })}</ContextMenu.Item>}
           <ContextMenu.Separator className="menu-separator" />
           <ContextMenu.Item className="menu-item" onSelect={rename}>{t('rename')}</ContextMenu.Item>
           <ContextMenu.Item className="menu-item danger" onSelect={remove}>{t('delete')}</ContextMenu.Item>
         </ContextMenu.Content>
       </ContextMenu.Portal>
     </ContextMenu.Root>
-    {node.kind === 'directory' && isOpen && children.map((child) => <TreeRow key={child.id} node={child} depth={depth + 1} />)}
+    {node.kind === 'directory' && isOpen && children.map((child) => <TreeRow key={child.id} node={child} depth={depth + 1} allowSplit={allowSplit} />)}
   </>
 }
 
-export function FileTree() {
+export function FileTree({ allowSplit = true }: { allowSplit?: boolean }) {
   const nodes = useWorkspace((state) => state.nodes)
   const setSelectedNodeId = useWorkspace((state) => state.setSelectedNodeId)
   const roots = useMemo(() => Object.values(nodes).filter((node) => node.parentId === null).sort((a, b) => a.kind === b.kind ? a.order - b.order : a.kind === 'directory' ? -1 : 1), [nodes])
   const { setNodeRef: setRootDropRef } = useDroppable({ id: 'tree-root' })
-  return <div ref={setRootDropRef} className="tree" role="tree" tabIndex={0} onClick={(event) => { if (event.currentTarget === event.target) setSelectedNodeId(null) }}>{roots.map((node) => <TreeRow key={node.id} node={node} depth={0} />)}</div>
+  return <div ref={setRootDropRef} className="tree" role="tree" tabIndex={0} onClick={(event) => { if (event.currentTarget === event.target) setSelectedNodeId(null) }}>{roots.map((node) => <TreeRow key={node.id} node={node} depth={0} allowSplit={allowSplit} />)}</div>
 }

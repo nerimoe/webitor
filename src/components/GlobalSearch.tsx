@@ -31,7 +31,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean; onOpenChan
   const { t } = useTranslation()
   const nodes = useWorkspace((state) => state.nodes)
   const contents = useWorkspace((state) => state.contents)
-  const openFile = useWorkspace((state) => state.openFile)
+  const openFileFullScreen = useWorkspace((state) => state.openFileFullScreen)
   const setPendingReveal = useWorkspace((state) => state.setPendingReveal)
   const setSidebarOpen = useWorkspace((state) => state.setSidebarOpen)
   const [query, setQuery] = useState('')
@@ -72,7 +72,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean; onOpenChan
   }, [query, records])
 
   const choose = (record: SearchRecord) => {
-    openFile(record.fileId, 'primary')
+    openFileFullScreen(record.fileId)
     if (!record.mediaKind) {
       const direct = record.text.toLowerCase().indexOf(query.toLowerCase())
       const from = record.from + Math.max(0, direct)

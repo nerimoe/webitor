@@ -16,11 +16,12 @@ interface EditorPaneProps {
   onNewDocument?: () => void
   onImportFiles?: () => void
   viewOnlyHeader?: boolean
+  allowSplit?: boolean
 }
 
 const DEFAULT_EDITOR_FONT_SIZE = 16
 
-export function EditorPane({ group, leading, onNewDocument, onImportFiles, viewOnlyHeader = false }: EditorPaneProps) {
+export function EditorPane({ group, leading, onNewDocument, onImportFiles, viewOnlyHeader = false, allowSplit = true }: EditorPaneProps) {
   const { t } = useTranslation()
   const nodes = useWorkspace((state) => state.nodes)
   const contents = useWorkspace((state) => state.contents)
@@ -38,9 +39,9 @@ export function EditorPane({ group, leading, onNewDocument, onImportFiles, viewO
   const resolution = node && content ? resolveDocumentViews({ name: node.name, mimeType: content.mimeType, contentKind: content.contentKind }) : null
   const activeView = resolution?.views.find((view) => view.id === group.view) ?? resolution?.views[0] ?? null
   const otherGroup = groups.find((candidate) => candidate.id !== group.id)
-  const splitCandidates = resolution?.views.filter((view) => view.id !== activeView?.id
-    && !(otherGroup?.activeFileId === fileId && otherGroup.view === view.id)) ?? []
   const splitActive = Boolean(groups[1].activeFileId)
+  const occupiedViewId = otherGroup?.activeFileId === fileId ? otherGroup.view : null
+  const splitCandidates = allowSplit && !splitActive ? resolution?.views.filter((view) => view.id !== activeView?.id) ?? [] : []
 
   const registerController = useCallback((controller: DocumentViewController | null) => {
     viewController.current = controller
@@ -69,6 +70,7 @@ export function EditorPane({ group, leading, onNewDocument, onImportFiles, viewO
     views={resolution.views}
     activeViewId={activeView.id}
     splitCandidates={splitCandidates}
+    unavailableViewIds={occupiedViewId ? [occupiedViewId] : []}
     onSelect={(viewId) => setGroupView(group.id, viewId)}
     onSplit={(viewId) => openFileView(fileId, group.id === 'primary' ? 'secondary' : 'primary', viewId)}
   /> : null
