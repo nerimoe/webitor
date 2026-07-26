@@ -6,7 +6,8 @@ import { bracketMatching, defaultHighlightStyle, foldGutter, foldKeymap, indentO
 import { highlightSelectionMatches, openSearchPanel, searchKeymap } from '@codemirror/search'
 import { EditorView, drawSelection, dropCursor, highlightActiveLine, keymap, lineNumbers } from '@codemirror/view'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Clock3, Download, Eye, EyeOff, FilePlus2, FileText, MoreHorizontal, Redo2, Save, Search, Share2, Undo2, Upload, X, ZoomIn, ZoomOut } from 'lucide-react'
+import * as Tooltip from '@radix-ui/react-tooltip'
+import { Clock3, Download, Eye, EyeOff, FilePlus2, FileText, MoreHorizontal, Redo2, RotateCcw, Save, Search, Share2, Undo2, Upload, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { isMarkdown, loadLanguage } from '../lib/language'
 import { dataUrlToBlob, shareBlob, shareTextFile } from '../lib/files'
@@ -34,6 +35,8 @@ interface DocumentAction extends OverflowAction {
   onClick: () => void
   active?: boolean
 }
+
+const DEFAULT_EDITOR_FONT_SIZE = 16
 
 export function EditorPane({ group, leading, onNewDocument, onImportFiles }: EditorPaneProps) {
   const { t } = useTranslation()
@@ -153,8 +156,9 @@ export function EditorPane({ group, leading, onNewDocument, onImportFiles }: Edi
       : void shareTextFile(content.text, node?.name ?? 'document.txt') })
     if (!image) {
       next.push({ id: 'timeline', priority: 6, label: t('timeline'), icon: Clock3, onClick: () => setTimelineOpen(true) })
-      next.push({ id: 'zoom-in', priority: 8, label: t('increaseTextSize'), icon: ZoomIn, onClick: () => setEditorFontSize(editorFontSize + 1) })
       next.push({ id: 'zoom-out', priority: 9, label: t('decreaseTextSize'), icon: ZoomOut, onClick: () => setEditorFontSize(editorFontSize - 1) })
+      next.push({ id: 'font-size', priority: 8, label: t('resetTextSize', { size: editorFontSize }), icon: RotateCcw, onClick: () => setEditorFontSize(DEFAULT_EDITOR_FONT_SIZE) })
+      next.push({ id: 'zoom-in', priority: 10, label: t('increaseTextSize'), icon: ZoomIn, onClick: () => setEditorFontSize(editorFontSize + 1) })
     }
     if (markdown) next.push({ id: 'preview', priority: 5, label: t('preview'), icon: Eye, active: previewActive, onClick: () => group.id === 'primary' ? previewMarkdown(fileId) : setGroupView(group.id, group.view === 'editor' ? 'markdown-preview' : 'editor') })
     return next
@@ -165,7 +169,12 @@ export function EditorPane({ group, leading, onNewDocument, onImportFiles }: Edi
     fixedSlots: 1
   })
 
-  const renderAction = (action: DocumentAction) => <IconButton key={action.id} icon={action.icon} label={action.label} active={action.active} onClick={action.onClick} />
+  const renderAction = (action: DocumentAction) => action.id === 'font-size'
+    ? <Tooltip.Root key={action.id} delayDuration={450}>
+      <Tooltip.Trigger asChild><button className="icon-button font-size-button" aria-label={action.label} onClick={action.onClick}>{editorFontSize}</button></Tooltip.Trigger>
+      <Tooltip.Portal><Tooltip.Content className="tooltip" sideOffset={6}>{action.label}</Tooltip.Content></Tooltip.Portal>
+    </Tooltip.Root>
+    : <IconButton key={action.id} icon={action.icon} label={action.label} active={action.active} onClick={action.onClick} />
 
   const renderOverflowAction = (action: DocumentAction) => {
     const Icon = action.icon

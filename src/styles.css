@@ -67,6 +67,7 @@ button:focus-visible, [role="menuitem"]:focus-visible { outline: 2px solid var(-
 .icon-button { width: 44px; height: 44px; flex: 0 0 44px; border: 0; border-radius: 5px; display: inline-grid; place-items: center; background: transparent; cursor: pointer; color: var(--text-muted); }
 .icon-button:hover, .icon-button.active { color: var(--text); background: var(--surface-2); }
 .icon-button.active { color: var(--accent-strong); }
+.font-size-button { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .tooltip { background: var(--text); color: var(--surface); border-radius: 4px; padding: 7px 9px; font-size: 12px; box-shadow: var(--shadow); z-index: 100; }
 
 .sidebar-region, .editor-area { height: 100%; position: relative; min-width: 0; }
