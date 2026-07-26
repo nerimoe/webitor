@@ -97,7 +97,7 @@ function TreeRow({ node, depth }: { node: FileNode; depth: number }) {
           onContextMenu={() => setSelectedNodeId(node.id)}
           onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === 'F2') { event.preventDefault(); rename() }
-            if (event.key === 'Delete') { event.preventDefault(); remove() }
+            if (event.key === 'Delete' || (event.key === 'Backspace' && event.metaKey)) { event.preventDefault(); remove() }
           }}
           onPointerDown={beginSwipe}
           onPointerMove={moveSwipe}

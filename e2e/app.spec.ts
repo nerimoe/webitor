@@ -602,6 +602,16 @@ test('deletes a file with a trackpad-style left swipe', async ({ page }) => {
   await expect(row).toHaveCount(0)
 })
 
+test('deletes a focused file with Command-Backspace', async ({ page }) => {
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'keyboard-delete.txt', mimeType: 'text/plain', buffer: Buffer.from('Delete me') })
+  if ((page.viewportSize()?.width ?? 1000) < 900) await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
+  const row = page.getByTestId('sidebar').locator('.tree-row', { hasText: 'keyboard-delete.txt' })
+  await row.focus()
+  page.once('dialog', async (dialog) => dialog.accept())
+  await row.press('Meta+Backspace')
+  await expect(row).toHaveCount(0)
+})
+
 test('keeps pinch-style zoom local to the text editor', async ({ page }) => {
   await page.locator('input[type=file]').first().setInputFiles({ name: 'zoom.txt', mimeType: 'text/plain', buffer: Buffer.from('Zoom') })
   if ((page.viewportSize()?.width ?? 1000) < 900) await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
