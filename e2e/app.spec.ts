@@ -79,10 +79,11 @@ test('reimports the same share link through the normal conflict flow', async ({ 
     await page.getByRole('button', { name: /More actions|更多操作/ }).click()
     await page.getByRole('menuitem', { name: /Create share link|创建分享链接/ }).click()
   }
-  await expect.poll(() => page.evaluate(() => (window as Window & { __sharedFileUrl?: string }).__sharedFileUrl)).toContain('#share=')
+  await expect.poll(() => page.evaluate(() => (window as Window & { __sharedFileUrl?: string }).__sharedFileUrl)).toContain('?share=')
   const url = await page.evaluate(() => (window as Window & { __sharedFileUrl?: string }).__sharedFileUrl)
-  expect(url).toContain('#share=g.')
-  expect(url!.length).toBeLessThan(3400)
+  expect(url).toMatch(/\?share=[A-Za-z0-9_-]{16}#key=[A-Za-z0-9_-]{43}$/)
+  expect(url!.length).toBeLessThan(150)
+  expect(url).not.toContain(text.slice(0, 16))
   await page.goto(url!)
   await expect(page.getByRole('dialog')).toContainText('shared-note.txt')
   await page.getByRole('button', { name: /Keep both|保留两份/ }).click()
@@ -90,7 +91,7 @@ test('reimports the same share link through the normal conflict flow', async ({ 
   await expect(page.getByTestId('editor-primary').locator('.cm-content')).toContainText(text.slice(0, 32))
   if (testInfo.project.name === 'ipad') await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
   await expect(page.getByTestId('sidebar').locator('.tree-row')).toHaveCount(2)
-  await expect.poll(() => page.url()).not.toContain('#share=')
+  await expect.poll(() => page.url()).not.toContain('?share=')
 
   await page.goto(url!)
   await expect(page.getByRole('dialog')).toContainText('shared-note.txt')
@@ -99,7 +100,7 @@ test('reimports the same share link through the normal conflict flow', async ({ 
   await expect(page.getByTestId('editor-primary').locator('.cm-content')).toContainText(text.slice(0, 32))
   if (testInfo.project.name === 'ipad') await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
   await expect(page.getByTestId('sidebar').locator('.tree-row')).toHaveCount(3)
-  await expect.poll(() => page.url()).not.toContain('#share=')
+  await expect.poll(() => page.url()).not.toContain('?share=')
 })
 
 test('can overwrite an existing file when importing a share link', async ({ page }) => {
@@ -118,6 +119,7 @@ test('can overwrite an existing file when importing a share link', async ({ page
     await page.getByRole('button', { name: /More actions|更多操作/ }).click()
     await page.getByRole('menuitem', { name: /Create share link|创建分享链接/ }).click()
   }
+  await expect.poll(() => page.evaluate(() => (window as Window & { __sharedFileUrl?: string }).__sharedFileUrl)).toContain('?share=')
   const url = await page.evaluate(() => (window as Window & { __sharedFileUrl?: string }).__sharedFileUrl)
   await page.locator('.cm-content').fill('Locally changed text')
   await page.goto(url!)
@@ -130,12 +132,12 @@ test('can overwrite an existing file when importing a share link', async ({ page
 })
 
 test('explains missing and corrupt shared file data', async ({ page }) => {
-  await page.goto('/?webitor-share=1')
-  await expect(page.getByRole('alert')).toContainText(/missing|缺少|truncated|截断/i)
-  await expect.poll(() => page.url()).not.toContain('webitor-share')
-  await page.goto('/?webitor-share=1#share=u.invalid')
-  await expect(page.getByRole('alert')).toContainText(/corrupt|损坏|不完整/i)
-  await expect.poll(() => page.url()).not.toContain('#share=')
+  await page.goto('/?share=AAAAAAAAAAAAAAAA')
+  await expect(page.getByRole('alert')).toContainText(/missing|缺少/i)
+  await expect.poll(() => page.url()).not.toContain('?share=')
+  await page.goto('/?share=AAAAAAAAAAAAAAAA#key=invalid')
+  await expect(page.getByRole('alert')).toContainText(/invalid|无效|损坏/i)
+  await expect.poll(() => page.url()).not.toContain('?share=')
 })
 
 test('offers split and single-view targets for external editor drops', async ({ page }, testInfo) => {

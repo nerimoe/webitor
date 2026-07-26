@@ -4,13 +4,18 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "predev": "vite build",
+    "dev": "concurrently -k -n web,worker \"npm:dev:web\" \"npm:dev:worker\"",
+    "dev:web": "vite",
+    "dev:worker": "wrangler dev --port 8787",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "lint": "tsc -b --pretty false"
+    "lint": "tsc -b --pretty false",
+    "cf:typegen": "wrangler types worker-configuration.d.ts --include-runtime false",
+    "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.4",
@@ -52,6 +57,7 @@
     "zustand": "latest"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260726.1",
     "@playwright/test": "latest",
     "@tailwindcss/vite": "latest",
     "@testing-library/jest-dom": "latest",
@@ -59,12 +65,14 @@
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "@vitejs/plugin-react": "latest",
+    "concurrently": "^10.0.4",
     "fake-indexeddb": "latest",
     "jsdom": "latest",
     "tailwindcss": "latest",
     "typescript": "latest",
     "vite": "latest",
     "vite-plugin-pwa": "latest",
-    "vitest": "latest"
+    "vitest": "latest",
+    "wrangler": "^4.114.0"
   }
 }

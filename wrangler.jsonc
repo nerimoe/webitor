@@ -1,0 +1,34 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "webitor",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-07-26",
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "./dist/",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "r2_buckets": [
+    {
+      "binding": "SHARES",
+      "bucket_name": "webitor-shares"
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "UPLOAD_RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": {
+        "limit": 20,
+        "period": 60
+      }
+    }
+  ],
+  "vars": {
+    "SHARE_TTL_SECONDS": "604800"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

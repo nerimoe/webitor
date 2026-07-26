@@ -177,8 +177,12 @@ export function EditorPane({ group, leading, onNewDocument, onImportFiles }: Edi
       try {
         const url = await createFileShareUrl({ name, text: content.text, dataUrl: content.dataUrl, mimeType: content.mimeType })
         const result = await shareOrCopyFileUrl(url, name)
-        if (result === 'copied') setNotice(url.length > 60_000 ? 'shareLinkLarge' : 'shareLinkCopied')
-      } catch (error) { setNotice(error instanceof ShareLinkError && error.code === 'tooLarge' ? 'shareLinkTooLarge' : 'shareLinkFailed') }
+        if (result === 'copied') setNotice('shareLinkCopied')
+      } catch (error) {
+        if (error instanceof ShareLinkError && error.code === 'tooLarge') setNotice('shareLinkTooLarge')
+        else if (error instanceof ShareLinkError && error.code === 'rateLimited') setNotice('shareLinkRateLimited')
+        else setNotice('shareLinkFailed')
+      }
     }
     if (!iOS) {
       next.push({ id: 'save', priority: 0, label: t(node?.handle ? 'save' : 'download'), icon: node?.handle ? Save : Download, onClick: () => void saveFile(fileId) })

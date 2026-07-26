@@ -5,7 +5,7 @@ import * as Tooltip from '@radix-ui/react-tooltip'
 import { FilePlus2, FolderInput, Menu, PanelLeft, PanelLeftOpen, Upload, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { collectDirectory, collectDroppedItems } from './lib/files'
-import { cleanFileShareUrl, hasFileShareMarker, readFileShareHash, ShareLinkError } from './lib/shareLink'
+import { cleanFileShareUrl, hasFileShareMarker, readFileShareUrl, ShareLinkError } from './lib/shareLink'
 import { useWorkspace } from './store/useWorkspace'
 import type { EditorGroup } from './types'
 import { useImportWorkflow, type ImportItem, type ImportTarget } from './hooks/useImportWorkflow'
@@ -66,26 +66,24 @@ export default function App() {
   useEffect(() => {
     if (!hydrated) return
     const importSharedFile = () => {
-      const hash = location.hash
-      if (!hash.startsWith('#share=')) {
-        if (hasFileShareMarker()) {
-          cleanFileShareUrl()
-          setNotice('sharedFileMissing')
-        }
-        return
-      }
+      if (!hasFileShareMarker()) return
+      const href = location.href
       cleanFileShareUrl()
-      void readFileShareHash(hash).then((shared) => {
-        if (!shared) return
+      void readFileShareUrl(href).then((shared) => {
         return importItems([{ kind: 'decoded', ...shared, source: 'drop' }], 'primary')
       }).catch((error) => {
         if (!(error instanceof ShareLinkError)) { setNotice('sharedFileCorrupt'); return }
         const notices = {
+          missing: 'sharedFileMissing',
           invalid: 'sharedFileCorrupt',
           tooLarge: 'sharedFileTooLarge',
           unsupportedCompression: 'sharedFileCompressionUnsupported',
           unsupportedImage: 'sharedFileUnsupportedImage',
-          unsupportedVersion: 'sharedFileUnsupportedVersion'
+          unsupportedVersion: 'sharedFileUnsupportedVersion',
+          notFound: 'sharedFileNotFound',
+          expired: 'sharedFileExpired',
+          network: 'sharedFileUnavailable',
+          rateLimited: 'sharedFileUnavailable'
         } as const
         setNotice(notices[error.code])
       })
@@ -230,7 +228,7 @@ export default function App() {
           {layout.sidebarOpen && <><button className="drawer-scrim" aria-label={t('close')} onClick={() => setSidebarOpen(false)} /><div className="sidebar-drawer"><Sidebar onImportFiles={() => void pickFiles()} onImportFolder={() => void pickFolder()} /></div></>}
         </>}
       </main>
-      {notice && <div className={`toast ${notice === 'copied' || notice === 'shareLinkCopied' || notice === 'shareLinkLarge' ? 'success' : ''}`} role="alert"><span>{t(notice)}</span><button onClick={() => setNotice(null)}><X size={17} /><span className="sr-only">{t('dismiss')}</span></button></div>}
+      {notice && <div className={`toast ${notice === 'copied' || notice === 'shareLinkCopied' ? 'success' : ''}`} role="alert"><span>{t(notice)}</span><button onClick={() => setNotice(null)}><X size={17} /><span className="sr-only">{t('dismiss')}</span></button></div>}
       <Dialog.Root open={Boolean(conflict)} onOpenChange={(open) => { if (!open && conflict) finishConflict('skip') }}>
         <Dialog.Portal>
           <Dialog.Overlay className="dialog-overlay" />
