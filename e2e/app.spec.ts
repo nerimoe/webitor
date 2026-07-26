@@ -18,6 +18,19 @@ test('creates and restores a local file', async ({ page }) => {
   await expect(page.locator('.cm-content')).toContainText('Offline note')
 })
 
+test('shows file type, line count, and character count in the document footer', async ({ page }) => {
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'statistics.txt', mimeType: 'text/plain', buffer: Buffer.from('First line\nSecond') })
+  if ((page.viewportSize()?.width ?? 1000) < 900) await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
+  await page.getByTestId('sidebar').getByText('statistics.txt', { exact: true }).click()
+  const statusBar = page.getByTestId('editor-primary').getByTestId('document-status-bar')
+  await expect(statusBar).toContainText(/Plain text|纯文本/)
+  await expect(statusBar).toContainText(/Lines: 2|2 行/)
+  await expect(statusBar).toContainText(/Characters: 17|17 个字符/)
+  await page.locator('.cm-content').fill('One')
+  await expect(statusBar).toContainText(/Lines: 1|1 行/)
+  await expect(statusBar).toContainText(/Characters: 3|3 个字符/)
+})
+
 test('imports files through the browser fallback', async ({ page }) => {
   await page.locator('input[type=file]').first().setInputFiles({ name: 'hello.ts', mimeType: 'text/typescript', buffer: Buffer.from('const hello = 1') })
   if ((page.viewportSize()?.width ?? 1000) < 900) await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()

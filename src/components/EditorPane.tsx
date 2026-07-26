@@ -39,6 +39,12 @@ interface DocumentAction extends OverflowAction {
 
 const DEFAULT_EDITOR_FONT_SIZE = 16
 
+const languageLabels: Record<string, string> = {
+  javascript: 'JavaScript', typescript: 'TypeScript', html: 'HTML', css: 'CSS', json: 'JSON',
+  markdown: 'Markdown', python: 'Python', java: 'Java', cpp: 'C/C++', rust: 'Rust', sql: 'SQL',
+  xml: 'XML', yaml: 'YAML', ini: 'INI'
+}
+
 export function EditorPane({ group, leading, onNewDocument, onImportFiles }: EditorPaneProps) {
   const { t } = useTranslation()
   const nodes = useWorkspace((state) => state.nodes)
@@ -73,6 +79,21 @@ export function EditorPane({ group, leading, onNewDocument, onImportFiles }: Edi
   const splitActive = Boolean(groups[1].activeFileId)
   const dark = theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)
   const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  const textStats = useMemo(() => {
+    if (!content || image) return null
+    let lines = 1
+    let characters = 0
+    for (const character of content.text) {
+      characters += 1
+      if (character === '\n') lines += 1
+    }
+    return { lines, characters }
+  }, [content?.text, image])
+  const fileType = image
+    ? (content?.mimeType?.split('/').at(-1)?.toUpperCase() ?? 'Image')
+    : node?.language === 'plain'
+      ? t('plainText')
+      : languageLabels[node?.language ?? ''] ?? node?.language ?? t('plainText')
 
   useEffect(() => {
     let cancelled = false
@@ -199,11 +220,12 @@ export function EditorPane({ group, leading, onNewDocument, onImportFiles }: Edi
         {splitActive && <button className="icon-button pane-close" aria-label={t('closePane')} onPointerDown={(event) => { event.preventDefault(); event.stopPropagation(); closePane() }} onKeyDown={closePaneFromKeyboard}><X size={18} /></button>}
       </div>
       <MarkdownPreview value={content.text} />
+      <DocumentStatusBar fileType={fileType} lines={textStats?.lines} characters={textStats?.characters} status={content.status} />
     </section>
   }
 
   return (
-    <section className="editor-pane" data-testid={`editor-${group.id}`} onDragOver={(event) => { if (event.dataTransfer.types.includes('Files')) event.preventDefault() }}>
+    <section className={`editor-pane ${content ? 'has-status-bar' : ''}`} data-testid={`editor-${group.id}`} onDragOver={(event) => { if (event.dataTransfer.types.includes('Files')) event.preventDefault() }}>
       <div className="document-bar">
         {leading && <div className="document-leading">{leading}</div>}
         {node ? <div className="document-title">
@@ -230,8 +252,25 @@ export function EditorPane({ group, leading, onNewDocument, onImportFiles }: Edi
         : group.view === 'markdown-preview' && markdown
         ? <MarkdownPreview value={content.text} />
         : <div ref={codeZoomRef} className="code-editor" style={{ '--editor-font-size': `${editorFontSize}px` } as CSSProperties}><CodeMirror key={fileId} ref={ref} value={content.text} initialState={initialEditorState} extensions={extensions} theme={dark ? 'dark' : 'light'} onChange={(value) => updateContent(fileId, value)} basicSetup={false} /></div>}
-      {content && <div className={`save-status ${content.status}`}><span />{t(content.status)}</div>}
+      {content && <DocumentStatusBar fileType={fileType} lines={textStats?.lines} characters={textStats?.characters} status={content.status} />}
       {fileId && !image && <TimelineDialog fileId={fileId} open={timelineOpen} onOpenChange={setTimelineOpen} />}
     </section>
   )
+}
+
+function DocumentStatusBar({ fileType, lines, characters, status }: {
+  fileType: string
+  lines?: number
+  characters?: number
+  status: 'cached' | 'saving' | 'synced' | 'local-only' | 'error'
+}) {
+  const { t } = useTranslation()
+  return <footer className="document-status-bar" data-testid="document-status-bar">
+    <div className="document-stats">
+      <span className="file-type">{fileType}</span>
+      {lines !== undefined && <span>{t('lineCount', { count: lines })}</span>}
+      {characters !== undefined && <span>{t('characterCount', { count: characters })}</span>}
+    </div>
+    <div className={`save-status ${status}`} role="status" aria-label={t(status)}><span className="save-status-dot" /><span className="save-status-label">{t(status)}</span></div>
+  </footer>
 }
