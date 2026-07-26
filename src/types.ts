@@ -54,6 +54,7 @@ export interface PersistedLayout {
   splitRatio: number
   editorFontSize: number
   sidebarOpen: boolean
+  sidebarCollapsed: boolean
   activeMobileGroup: 'primary' | 'secondary'
   groups: [EditorGroup, EditorGroup]
 }

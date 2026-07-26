@@ -138,14 +138,20 @@ test('expands every sidebar command when the sidebar is wide enough', async ({ p
   expect(handleBox).not.toBeNull()
   await page.mouse.move(handleBox!.x + handleBox!.width / 2, handleBox!.y + handleBox!.height / 2)
   await page.mouse.down()
-  await page.mouse.move(handleBox!.x + 160, handleBox!.y + handleBox!.height / 2)
+  await page.mouse.move(handleBox!.x + 220, handleBox!.y + handleBox!.height / 2)
   await page.mouse.up()
 
   const sidebarActions = page.getByTestId('sidebar').locator('.sidebar-actions')
-  for (const name of [/New file|新建文件/, /New folder|新建文件夹/, /Search documents|搜索文档/, /Settings|设置/, /Import files|导入文件/, /Import folder|导入文件夹/, /Export workspace|导出工作区/, /Share documents|分享文档/]) {
+  for (const name of [/Hide file list|隐藏文件列表/, /New file|新建文件/, /New folder|新建文件夹/, /Search documents|搜索文档/, /Settings|设置/, /Import files|导入文件/, /Import folder|导入文件夹/, /Export workspace|导出工作区/, /Share documents|分享文档/]) {
     await expect(sidebarActions.getByRole('button', { name })).toBeVisible()
   }
   await expect(sidebarActions.getByRole('button', { name: /More actions|更多操作/ })).toHaveCount(0)
+  await sidebarActions.getByRole('button', { name: /Hide file list|隐藏文件列表/ }).click()
+  await expect(page.locator('aside.sidebar')).toBeHidden()
+  const showSidebar = page.getByRole('button', { name: /Show file list|显示文件列表/ })
+  await expect(showSidebar).toBeVisible()
+  await showSidebar.click()
+  await expect(page.locator('aside.sidebar')).toBeVisible()
 })
 
 test('shows Markdown preview without a duplicate editor toolbar', async ({ page }, testInfo) => {
@@ -241,11 +247,37 @@ test('searches across documents and opens the matching result', async ({ page },
     { name: 'alpha.txt', mimeType: 'text/plain', buffer: Buffer.from('ordinary text') },
     { name: 'meeting.md', mimeType: 'text/markdown', buffer: Buffer.from('Project Aurora decision') }
   ])
-  await page.getByTestId('sidebar').getByRole('button', { name: /Search documents|搜索文档/ }).click()
+  const sidebar = page.getByTestId('sidebar')
+  const searchButton = sidebar.getByRole('button', { name: /Search documents|搜索文档/ })
+  if (await searchButton.isVisible()) await searchButton.click()
+  else {
+    await sidebar.getByRole('button', { name: /More actions|更多操作/ }).click()
+    await page.getByRole('menuitem', { name: /Search documents|搜索文档/ }).click()
+  }
   await page.getByPlaceholder(/Search names|搜索文件名/).fill('Aurora')
   await page.getByRole('button', { name: /meeting\.md.*Aurora/i }).click()
   await expect(page.locator('.document-title')).toContainText('meeting.md')
   await expect(page.locator('.cm-content')).toContainText('Project Aurora decision')
+})
+
+test('opens global search by pulling past the top of the file list', async ({ page }) => {
+  if ((page.viewportSize()?.width ?? 1000) < 900) await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
+  const treeScroll = page.locator('.tree-scroll')
+  const pullContent = page.locator('.tree-pull-content')
+  await treeScroll.dispatchEvent('wheel', { deltaY: -100, deltaX: 0 })
+  await expect(pullContent).not.toHaveCSS('transform', 'none')
+  await treeScroll.dispatchEvent('wheel', { deltaY: -100, deltaX: 0 })
+  await expect(page.getByPlaceholder(/Search names|搜索文件名/)).toBeVisible()
+})
+
+test('uses touch elasticity to open search on iPad', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'ipad')
+  await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
+  const treeScroll = page.locator('.tree-scroll')
+  await treeScroll.dispatchEvent('touchstart', { touches: [{ identifier: 1, clientX: 20, clientY: 100 }] })
+  await treeScroll.dispatchEvent('touchmove', { touches: [{ identifier: 1, clientX: 20, clientY: 310 }] })
+  await treeScroll.dispatchEvent('touchend', { touches: [] })
+  await expect(page.getByPlaceholder(/Search names|搜索文件名/)).toBeVisible()
 })
 
 test('keeps an editing timeline and restores the original text', async ({ page }, testInfo) => {
@@ -270,8 +302,51 @@ test('imports and previews an image document', async ({ page }, testInfo) => {
   await page.getByTestId('sidebar').getByText('pixel.png', { exact: true }).click()
   await expect(page.locator('.image-preview img')).toBeVisible()
   await expect.poll(() => page.locator('.image-preview img').evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0)
-  await page.locator('.image-stage').dispatchEvent('wheel', { ctrlKey: true, deltaY: -100 })
+  const stage = page.locator('.image-stage')
+  const stageBox = await stage.boundingBox()
+  expect(stageBox).not.toBeNull()
+  const localAnchor = { x: stageBox!.width * .72, y: stageBox!.height * .64 }
+  const beforeAnchor = await stage.evaluate((element, anchor) => ({
+    x: (element.scrollLeft + anchor.x) / element.scrollWidth,
+    y: (element.scrollTop + anchor.y) / element.scrollHeight
+  }), localAnchor)
+  await stage.dispatchEvent('wheel', { ctrlKey: true, deltaY: -100, clientX: stageBox!.x + localAnchor.x, clientY: stageBox!.y + localAnchor.y })
   await expect(page.locator('.image-toolbar')).toContainText('110%')
+  const afterAnchor = await stage.evaluate((element, anchor) => ({
+    x: (element.scrollLeft + anchor.x) / element.scrollWidth,
+    y: (element.scrollTop + anchor.y) / element.scrollHeight
+  }), localAnchor)
+  expect(Math.abs(afterAnchor.x - beforeAnchor.x)).toBeLessThan(.03)
+  expect(Math.abs(afterAnchor.y - beforeAnchor.y)).toBeLessThan(.03)
+})
+
+test('zooms an image around the midpoint of two touches', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium')
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64')
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'pinch.png', mimeType: 'image/png', buffer: png })
+  await page.getByTestId('sidebar').getByText('pinch.png', { exact: true }).click()
+  const stage = page.locator('.image-stage')
+  const box = await stage.boundingBox()
+  expect(box).not.toBeNull()
+  const center = { x: box!.width * .68, y: box!.height * .62 }
+  const point = (offset: number) => ({ clientX: box!.x + center.x + offset, clientY: box!.y + center.y, pointerType: 'touch' })
+  const before = await stage.evaluate((element, anchor) => ({
+    x: (element.scrollLeft + anchor.x) / element.scrollWidth,
+    y: (element.scrollTop + anchor.y) / element.scrollHeight
+  }), center)
+  await stage.dispatchEvent('pointerdown', { ...point(-40), pointerId: 1 })
+  await stage.dispatchEvent('pointerdown', { ...point(40), pointerId: 2 })
+  await stage.dispatchEvent('pointermove', { ...point(-65), pointerId: 1 })
+  await stage.dispatchEvent('pointermove', { ...point(65), pointerId: 2 })
+  await stage.dispatchEvent('pointerup', { ...point(-65), pointerId: 1 })
+  await stage.dispatchEvent('pointerup', { ...point(65), pointerId: 2 })
+  await expect(page.locator('.image-toolbar')).not.toContainText('100%')
+  const after = await stage.evaluate((element, anchor) => ({
+    x: (element.scrollLeft + anchor.x) / element.scrollWidth,
+    y: (element.scrollTop + anchor.y) / element.scrollHeight
+  }), center)
+  expect(Math.abs(after.x - before.x)).toBeLessThan(.04)
+  expect(Math.abs(after.y - before.y)).toBeLessThan(.04)
 })
 
 test('can pan to every side of a zoomed image', async ({ page }, testInfo) => {

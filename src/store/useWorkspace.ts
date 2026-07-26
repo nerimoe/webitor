@@ -19,6 +19,7 @@ export const initialPersistedState = (): PersistedState => ({
     splitRatio: 50,
     editorFontSize: 16,
     sidebarOpen: false,
+    sidebarCollapsed: false,
     activeMobileGroup: 'primary',
     groups: [
       { id: 'primary', tabs: [], activeFileId: null, view: 'editor' },
@@ -58,6 +59,7 @@ interface WorkspaceStore extends PersistedState {
   setTheme: (theme: ThemeMode) => void
   setLocale: (locale: Locale) => void
   setSidebarOpen: (open: boolean) => void
+  setSidebarCollapsed: (collapsed: boolean) => void
   setActiveMobileGroup: (group: EditorGroup['id']) => void
   setSidebarWidth: (width: number) => void
   setSplitRatio: (ratio: number) => void
@@ -422,6 +424,10 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
   setTheme: (theme) => { set((state) => ({ settings: { ...state.settings, theme } })); void get().persist() },
   setLocale: (nextLocale) => { set((state) => ({ settings: { ...state.settings, locale: nextLocale } })); void get().persist() },
   setSidebarOpen: (sidebarOpen) => set((state) => ({ layout: { ...state.layout, sidebarOpen } })),
+  setSidebarCollapsed: (sidebarCollapsed) => {
+    set((state) => ({ layout: { ...state.layout, sidebarCollapsed } }))
+    void get().persist()
+  },
   setActiveMobileGroup: (activeMobileGroup) => set((state) => ({ layout: { ...state.layout, activeMobileGroup } })),
   setSidebarWidth: (sidebarWidth) => set((state) => ({ layout: { ...state.layout, sidebarWidth } })),
   setSplitRatio: (splitRatio) => set((state) => ({ layout: { ...state.layout, splitRatio } })),

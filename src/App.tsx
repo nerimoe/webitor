@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Group, Panel, Separator } from 'react-resizable-panels'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { Group, Panel, Separator, usePanelRef } from 'react-resizable-panels'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as Tooltip from '@radix-ui/react-tooltip'
-import { FilePlus2, FolderInput, Menu, PanelLeft, Upload, X } from 'lucide-react'
+import { FilePlus2, FolderInput, Menu, PanelLeft, PanelLeftOpen, Upload, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { collectDirectory, collectDroppedItems, fileToDataUrl, isProbablyText, isSupportedImage } from './lib/files'
 import { useWorkspace } from './store/useWorkspace'
@@ -35,12 +35,15 @@ export default function App() {
   const addDirectory = useWorkspace((state) => state.addDirectory)
   const replaceImportedFile = useWorkspace((state) => state.replaceImportedFile)
   const setSidebarOpen = useWorkspace((state) => state.setSidebarOpen)
+  const setSidebarCollapsed = useWorkspace((state) => state.setSidebarCollapsed)
   const setActiveMobileGroup = useWorkspace((state) => state.setActiveMobileGroup)
   const setSidebarWidth = useWorkspace((state) => state.setSidebarWidth)
   const setSplitRatio = useWorkspace((state) => state.setSplitRatio)
   const setNotice = useWorkspace((state) => state.setNotice)
   const fileInput = useRef<HTMLInputElement>(null)
   const folderInput = useRef<HTMLInputElement>(null)
+  const sidebarPanelRef = usePanelRef()
+  const restoredSidebarCollapse = useRef(false)
   const narrow = useNarrow()
   const [dragTarget, setDragTarget] = useState<'tree' | 'editor' | null>(null)
   const [applyConflictToAll, setApplyConflictToAll] = useState(false)
@@ -53,6 +56,11 @@ export default function App() {
     document.documentElement.lang = settings.locale
   }, [settings])
   useEffect(() => { folderInput.current?.setAttribute('webkitdirectory', '') }, [])
+  useEffect(() => {
+    if (!hydrated || narrow || restoredSidebarCollapse.current) return
+    restoredSidebarCollapse.current = true
+    if (layout.sidebarCollapsed) sidebarPanelRef.current?.collapse()
+  }, [hydrated, layout.sidebarCollapsed, narrow, sidebarPanelRef])
 
   const ensureFolders = useCallback((path: string[], root: string | null = null) => {
     let parentId = root
@@ -156,15 +164,19 @@ export default function App() {
     <div className="app-shell">
       <main className="workbench">
         {!narrow ? <Group orientation="horizontal" id="outer-layout">
-          <Panel id="sidebar" defaultSize={`${layout.sidebarWidth}px`} minSize="220px" maxSize="420px" onResize={(size) => setSidebarWidth(size.inPixels)}>
+          <Panel id="sidebar" panelRef={sidebarPanelRef} defaultSize={`${layout.sidebarWidth}px`} minSize="220px" maxSize="480px" collapsible collapsedSize="0px" onResize={(size) => {
+            const collapsed = size.inPixels < 1
+            if (collapsed !== layout.sidebarCollapsed) setSidebarCollapsed(collapsed)
+            if (!collapsed) setSidebarWidth(size.inPixels)
+          }}>
             <div className={`drop-region sidebar-region ${dragTarget === 'tree' ? 'drag-active' : ''}`} onDragEnter={(e) => { if (e.dataTransfer.types.includes('Files')) setDragTarget('tree') }} onDragOver={(e) => e.preventDefault()} onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragTarget(null) }} onDrop={(e) => handleDrop(e, false)}>
-              <Sidebar onImportFiles={() => void pickFiles()} onImportFolder={() => void pickFolder()} />
+              <Sidebar onImportFiles={() => void pickFiles()} onImportFolder={() => void pickFolder()} onCollapse={() => sidebarPanelRef.current?.collapse()} />
               {dragTarget === 'tree' && <div className="drop-overlay"><PanelLeft size={26} />{t('dropTree')}</div>}
             </div>
           </Panel>
-          <Separator className="resize-handle" />
+          <Separator className={`resize-handle sidebar-resize ${layout.sidebarCollapsed ? 'collapsed' : ''}`} />
           <Panel id="editors" minSize="360px">
-            <EditorArea groups={editorGroups} hasSecondary={hasSecondary} splitRatio={layout.splitRatio} setSplitRatio={setSplitRatio} onDrop={(event) => handleDrop(event, true)} dragActive={dragTarget === 'editor'} setDragTarget={setDragTarget} onNewDocument={createQuickDocument} onImportFiles={() => void pickFiles()} />
+            <EditorArea groups={editorGroups} hasSecondary={hasSecondary} splitRatio={layout.splitRatio} setSplitRatio={setSplitRatio} onDrop={(event) => handleDrop(event, true)} dragActive={dragTarget === 'editor'} setDragTarget={setDragTarget} onNewDocument={createQuickDocument} onImportFiles={() => void pickFiles()} leading={layout.sidebarCollapsed ? <IconButton icon={PanelLeftOpen} label={t('showSidebar')} onClick={() => sidebarPanelRef.current?.expand()} /> : undefined} />
           </Panel>
         </Group> : <>
           <div className={`mobile-editor ${dragTarget === 'editor' ? 'drag-active' : ''}`}
@@ -201,7 +213,7 @@ export default function App() {
   </WorkspaceDndProvider></Tooltip.Provider>
 }
 
-function EditorArea({ groups, hasSecondary, splitRatio, setSplitRatio, onDrop, dragActive, setDragTarget, onNewDocument, onImportFiles }: {
+function EditorArea({ groups, hasSecondary, splitRatio, setSplitRatio, onDrop, dragActive, setDragTarget, onNewDocument, onImportFiles, leading }: {
   groups: [EditorGroup, EditorGroup]
   hasSecondary: boolean
   splitRatio: number
@@ -211,14 +223,15 @@ function EditorArea({ groups, hasSecondary, splitRatio, setSplitRatio, onDrop, d
   setDragTarget: (target: 'tree' | 'editor' | null) => void
   onNewDocument: () => void
   onImportFiles: () => void
+  leading?: ReactNode
 }) {
   const { t } = useTranslation()
   return <div className={`editor-area ${dragActive ? 'drag-active' : ''}`} onDragEnter={(event) => { if (event.dataTransfer.types.includes('Files')) setDragTarget('editor') }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragTarget(null) }} onDrop={onDrop}>
     {hasSecondary ? <Group orientation="horizontal" id="editor-layout" onLayoutChanged={(value, meta) => { if (meta.isUserInteraction) setSplitRatio(value.primary ?? splitRatio) }}>
-      <Panel id="primary" defaultSize={splitRatio} minSize="25%"><EditorPane group={groups[0]} onNewDocument={onNewDocument} onImportFiles={onImportFiles} /></Panel>
+      <Panel id="primary" defaultSize={splitRatio} minSize="25%"><EditorPane group={groups[0]} leading={leading} onNewDocument={onNewDocument} onImportFiles={onImportFiles} /></Panel>
       <Separator className="resize-handle editor-resize" />
       <Panel id="secondary" defaultSize={100 - splitRatio} minSize="25%"><EditorPane group={groups[1]} onNewDocument={onNewDocument} onImportFiles={onImportFiles} /></Panel>
-    </Group> : <EditorPane group={groups[0]} onNewDocument={onNewDocument} onImportFiles={onImportFiles} />}
+    </Group> : <EditorPane group={groups[0]} leading={leading} onNewDocument={onNewDocument} onImportFiles={onImportFiles} />}
     {dragActive && <div className="drop-overlay editor-drop"><Upload size={28} />{t('dropEditor')}</div>}
     <EditorDropZones />
   </div>

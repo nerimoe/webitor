@@ -3,7 +3,7 @@ import { initReactI18next } from 'react-i18next'
 
 export const resources = {
   en: { translation: {
-    files: 'FILES', workspace: 'Documents', newFile: 'New file', newFolder: 'New folder',
+    files: 'FILES', workspace: 'Documents', newFile: 'New file', newFolder: 'New folder', collapseSidebar: 'Hide file list', showSidebar: 'Show file list',
     importFiles: 'Import files', importFolder: 'Import folder', exportWorkspace: 'Export workspace',
     rename: 'Rename', delete: 'Delete', open: 'Open', openOther: 'Open in other group', openRight: 'Open “{{name}}” on the right', replaceRight: 'Replace right pane with “{{name}}”', closePane: 'Close pane',
     moveOther: 'Open in split view', close: 'Close', save: 'Save', saveAs: 'Save as', share: 'Share', shareWorkspace: 'Share documents',
@@ -24,7 +24,7 @@ export const resources = {
     touchHint: 'Long-press files for more actions', copied: 'Copied', importFailed: 'Some files could not be imported.'
   } },
   'zh-CN': { translation: {
-    files: '文件', workspace: '文档', newFile: '新建文件', newFolder: '新建文件夹',
+    files: '文件', workspace: '文档', newFile: '新建文件', newFolder: '新建文件夹', collapseSidebar: '隐藏文件列表', showSidebar: '显示文件列表',
     importFiles: '导入文件', importFolder: '导入文件夹', exportWorkspace: '导出工作区',
     rename: '重命名', delete: '删除', open: '打开', openOther: '在另一编辑组打开', openRight: '在右侧打开“{{name}}”', replaceRight: '将右侧替换为“{{name}}”', closePane: '关闭此栏',
     moveOther: '在分屏中打开', close: '关闭', save: '保存', saveAs: '另存为', share: '分享', shareWorkspace: '分享文档',

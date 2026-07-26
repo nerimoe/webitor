@@ -1,6 +1,6 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Download, FilePlus2, FolderInput, FolderPlus, MoreHorizontal, Search, Share2, Upload } from 'lucide-react'
+import { Download, FilePlus2, FolderInput, FolderPlus, MoreHorizontal, PanelLeftClose, Search, Share2, Upload } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { shareWorkspace, workspaceZip } from '../lib/files'
 import { useWorkspace } from '../store/useWorkspace'
@@ -10,9 +10,12 @@ import { GlobalSearch } from './GlobalSearch'
 import { SettingsMenu } from './SettingsMenu'
 import { useActionOverflow } from './useActionOverflow'
 
-export function Sidebar({ onImportFiles, onImportFolder }: {
+const PULL_SEARCH_THRESHOLD = 72
+
+export function Sidebar({ onImportFiles, onImportFolder, onCollapse }: {
   onImportFiles: () => void
   onImportFolder: () => void
+  onCollapse?: () => void
 }) {
   const { t } = useTranslation()
   const nodes = useWorkspace((state) => state.nodes)
@@ -21,10 +24,15 @@ export function Sidebar({ onImportFiles, onImportFolder }: {
   const addFile = useWorkspace((state) => state.addFile)
   const addDirectory = useWorkspace((state) => state.addDirectory)
   const longPress = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const treeScroll = useRef<HTMLDivElement>(null)
+  const pullState = useRef<{ startY: number | null; offset: number; wheelTimer: ReturnType<typeof setTimeout> | null }>({ startY: null, offset: 0, wheelTimer: null })
   const [searchOpen, setSearchOpen] = useState(false)
+  const [pullOffset, setPullOffset] = useState(0)
+  const [pulling, setPulling] = useState(false)
   const { ref: actionsRef, visible, overflow } = useActionOverflow([
-    { id: 'new', priority: 0 }, { id: 'folder', priority: 1 }, { id: 'search', priority: 2 }, { id: 'settings', priority: 3 },
-    { id: 'import-files', priority: 4 }, { id: 'import-folder', priority: 5 }, { id: 'export', priority: 6 }, { id: 'share', priority: 7 }
+    ...(onCollapse ? [{ id: 'collapse', priority: 0 }] : []),
+    { id: 'new', priority: 1 }, { id: 'folder', priority: 2 }, { id: 'search', priority: 3 }, { id: 'settings', priority: 4 },
+    { id: 'import-files', priority: 5 }, { id: 'import-folder', priority: 6 }, { id: 'export', priority: 7 }, { id: 'share', priority: 8 }
   ])
   const visibleIds = new Set(visible.map((item) => item.id))
   const createFile = () => {
@@ -35,6 +43,57 @@ export function Sidebar({ onImportFiles, onImportFolder }: {
     const name = window.prompt(t('folderName'), 'folder')
     if (name) addDirectory(name)
   }
+  useEffect(() => {
+    const element = treeScroll.current
+    if (!element) return
+    const setOffset = (offset: number) => {
+      pullState.current.offset = offset
+      setPullOffset(offset)
+    }
+    const release = () => {
+      const shouldSearch = pullState.current.offset >= PULL_SEARCH_THRESHOLD
+      pullState.current.startY = null
+      if (pullState.current.wheelTimer) window.clearTimeout(pullState.current.wheelTimer)
+      pullState.current.wheelTimer = null
+      setPulling(false)
+      setOffset(0)
+      if (shouldSearch) setSearchOpen(true)
+    }
+    const onTouchStart = (event: TouchEvent) => {
+      if (event.touches.length !== 1 || element.scrollTop > 0) return
+      pullState.current.startY = event.touches[0].clientY
+      setPulling(true)
+    }
+    const onTouchMove = (event: TouchEvent) => {
+      const startY = pullState.current.startY
+      if (startY === null || event.touches.length !== 1) return
+      const distance = event.touches[0].clientY - startY
+      if (distance <= 0 || element.scrollTop > 0) return
+      event.preventDefault()
+      setOffset(Math.min(112, distance * 0.4))
+    }
+    const onWheel = (event: WheelEvent) => {
+      if (element.scrollTop > 0 || event.deltaY >= 0 || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return
+      event.preventDefault()
+      setPulling(true)
+      setOffset(Math.min(112, pullState.current.offset + Math.abs(event.deltaY) * 0.45))
+      if (pullState.current.wheelTimer) window.clearTimeout(pullState.current.wheelTimer)
+      pullState.current.wheelTimer = window.setTimeout(release, 140)
+    }
+    element.addEventListener('touchstart', onTouchStart, { passive: true })
+    element.addEventListener('touchmove', onTouchMove, { passive: false })
+    element.addEventListener('touchend', release)
+    element.addEventListener('touchcancel', release)
+    element.addEventListener('wheel', onWheel, { passive: false })
+    return () => {
+      element.removeEventListener('touchstart', onTouchStart)
+      element.removeEventListener('touchmove', onTouchMove)
+      element.removeEventListener('touchend', release)
+      element.removeEventListener('touchcancel', release)
+      element.removeEventListener('wheel', onWheel)
+      if (pullState.current.wheelTimer) window.clearTimeout(pullState.current.wheelTimer)
+    }
+  }, [])
   return (
     <aside className="sidebar" data-testid="sidebar"
       onPointerDown={() => { longPress.current = setTimeout(() => undefined, 500) }}
@@ -42,6 +101,7 @@ export function Sidebar({ onImportFiles, onImportFolder }: {
       <div className="sidebar-heading">
         <span>{t('files')}</span>
         <div ref={actionsRef} className="sidebar-actions">
+          {visibleIds.has('collapse') && <IconButton icon={PanelLeftClose} label={t('collapseSidebar')} onClick={onCollapse} />}
           {visibleIds.has('new') && <IconButton icon={FilePlus2} label={t('newFile')} onClick={createFile} />}
           {visibleIds.has('folder') && <IconButton icon={FolderPlus} label={t('newFolder')} onClick={createFolder} />}
           {visibleIds.has('search') && <IconButton icon={Search} label={t('globalSearch')} onClick={() => setSearchOpen(true)} />}
@@ -53,6 +113,7 @@ export function Sidebar({ onImportFiles, onImportFolder }: {
           {overflow.length > 0 && <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild><IconButton icon={MoreHorizontal} label={t('moreActions')} /></DropdownMenu.Trigger>
             <DropdownMenu.Portal><DropdownMenu.Content className="menu-content" align="end">
+              {overflow.some((item) => item.id === 'collapse') && <DropdownMenu.Item className="menu-item with-icon" onSelect={onCollapse}><PanelLeftClose size={18} />{t('collapseSidebar')}</DropdownMenu.Item>}
               {overflow.some((item) => item.id === 'new') && <DropdownMenu.Item className="menu-item with-icon" onSelect={createFile}><FilePlus2 size={18} />{t('newFile')}</DropdownMenu.Item>}
               {overflow.some((item) => item.id === 'folder') && <DropdownMenu.Item className="menu-item with-icon" onSelect={createFolder}><FolderPlus size={18} />{t('newFolder')}</DropdownMenu.Item>}
               {overflow.some((item) => item.id === 'search') && <DropdownMenu.Item className="menu-item with-icon" onSelect={() => setSearchOpen(true)}><Search size={18} />{t('globalSearch')}</DropdownMenu.Item>}
@@ -65,7 +126,12 @@ export function Sidebar({ onImportFiles, onImportFolder }: {
           </DropdownMenu.Root>}
         </div>
       </div>
-      <div className="tree-scroll">{Object.keys(nodes).length ? <FileTree /> : <div className="tree-empty">{t('touchHint')}</div>}</div>
+      <div ref={treeScroll} className="tree-scroll">
+        <div className={`pull-search-indicator ${pullOffset >= PULL_SEARCH_THRESHOLD ? 'ready' : ''}`} style={{ opacity: Math.min(1, pullOffset / 48) }} aria-hidden="true"><Search size={22} /></div>
+        <div className={`tree-pull-content ${pulling ? 'pulling' : ''}`} style={{ transform: pullOffset ? `translateY(${pullOffset}px)` : undefined }}>
+          {Object.keys(nodes).length ? <FileTree /> : <div className="tree-empty">{t('touchHint')}</div>}
+        </div>
+      </div>
       <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
     </aside>
   )

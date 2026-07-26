@@ -4,7 +4,10 @@ interface Options {
   min: number
   max: number
   step: number
+  onZoomAt?: (value: number, anchor: ZoomAnchor) => void
 }
+
+export interface ZoomAnchor { clientX: number; clientY: number }
 
 const clamp = (value: number, { min, max }: Options) => Math.max(min, Math.min(max, value))
 
@@ -21,11 +24,19 @@ export function useLocalZoom<T extends HTMLElement>(value: number, setValue: (va
   useEffect(() => {
     const element = ref.current
     if (!element) return
-    const update = (next: number) => setValue(Math.round(clamp(next, options)))
+    const update = (next: number, anchor?: ZoomAnchor) => {
+      const value = Math.round(clamp(next, options))
+      if (anchor && options.onZoomAt) options.onZoomAt(value, anchor)
+      else setValue(value)
+    }
+    const elementCenter = () => {
+      const rect = element.getBoundingClientRect()
+      return { clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 }
+    }
     const onWheel = (event: WheelEvent) => {
       if (!event.ctrlKey) return
       event.preventDefault()
-      update(valueRef.current - Math.sign(event.deltaY || 1) * options.step)
+      update(valueRef.current - Math.sign(event.deltaY || 1) * options.step, { clientX: event.clientX, clientY: event.clientY })
     }
     const onGestureStart = (event: Event) => {
       event.preventDefault()
@@ -34,11 +45,21 @@ export function useLocalZoom<T extends HTMLElement>(value: number, setValue: (va
     const onGestureChange = (event: Event) => {
       event.preventDefault()
       const scale = (event as Event & { scale?: number }).scale ?? 1
-      update((pinchStart.current ?? valueRef.current) * scale)
+      const gesture = event as Event & { clientX?: number; clientY?: number }
+      update((pinchStart.current ?? valueRef.current) * scale, {
+        clientX: gesture.clientX ?? elementCenter().clientX,
+        clientY: gesture.clientY ?? elementCenter().clientY
+      })
     }
     const distance = () => {
       const [first, second] = [...pointers.current.values()]
       return first && second ? Math.hypot(first.x - second.x, first.y - second.y) : 0
+    }
+    const pointerCenter = () => {
+      const [first, second] = [...pointers.current.values()]
+      return first && second
+        ? { clientX: (first.x + second.x) / 2, clientY: (first.y + second.y) / 2 }
+        : elementCenter()
     }
     const onPointerDown = (event: PointerEvent) => {
       if (event.pointerType !== 'touch') return
@@ -51,7 +72,7 @@ export function useLocalZoom<T extends HTMLElement>(value: number, setValue: (va
       const start = pointerStart.current
       if (!start || pointers.current.size < 2 || !start.distance) return
       event.preventDefault()
-      update(start.value * (distance() / start.distance))
+      update(start.value * (distance() / start.distance), pointerCenter())
     }
     const onPointerEnd = (event: PointerEvent) => {
       pointers.current.delete(event.pointerId)
