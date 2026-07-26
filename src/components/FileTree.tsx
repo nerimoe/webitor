@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import { ChevronRight, FileText, Folder, FolderOpen, GripVertical } from 'lucide-react'
@@ -17,6 +17,7 @@ function TreeRow({ node, depth }: { node: FileNode; depth: number }) {
   const { setNodeRef: setDroppableRef } = useDroppable({ id: `row:${node.id}` })
   const { dropHint } = useWorkspaceDrag()
   const swipeStart = useRef<{ pointerId: number; x: number } | null>(null)
+  const wheelSwipe = useRef<{ offset: number; timer: ReturnType<typeof setTimeout> | null }>({ offset: 0, timer: null })
   const suppressClick = useRef(false)
   const [swipeOffset, setSwipeOffset] = useState(0)
   const active = selectedNodeId === node.id
@@ -56,6 +57,29 @@ function TreeRow({ node, depth }: { node: FileNode; depth: number }) {
     }
     setSwipeOffset(0)
   }
+  const finishWheelSwipe = () => {
+    const distance = wheelSwipe.current.offset
+    wheelSwipe.current = { offset: 0, timer: null }
+    if (distance < -84) remove()
+    if (Math.abs(distance) > 8) {
+      suppressClick.current = true
+      window.setTimeout(() => { suppressClick.current = false }, 0)
+    }
+    setSwipeOffset(0)
+  }
+  const moveWheelSwipe = (event: React.WheelEvent<HTMLDivElement>) => {
+    if (node.kind !== 'file' || Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return
+    event.preventDefault()
+    if (wheelSwipe.current.timer) window.clearTimeout(wheelSwipe.current.timer)
+    const offset = Math.max(-108, Math.min(0, wheelSwipe.current.offset - event.deltaX))
+    wheelSwipe.current.offset = offset
+    wheelSwipe.current.timer = window.setTimeout(finishWheelSwipe, 140)
+    setSwipeOffset(offset)
+  }
+
+  useEffect(() => () => {
+    if (wheelSwipe.current.timer) window.clearTimeout(wheelSwipe.current.timer)
+  }, [])
 
   return <>
     <ContextMenu.Root>
@@ -79,6 +103,7 @@ function TreeRow({ node, depth }: { node: FileNode; depth: number }) {
           onPointerMove={moveSwipe}
           onPointerUp={finishSwipe}
           onPointerCancel={finishSwipe}
+          onWheel={moveWheelSwipe}
           {...listeners}
         >
           <span className="tree-grip" aria-hidden="true"><GripVertical size={14} /></span>

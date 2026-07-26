@@ -274,6 +274,57 @@ test('imports and previews an image document', async ({ page }, testInfo) => {
   await expect(page.locator('.image-toolbar')).toContainText('110%')
 })
 
+test('can pan to every side of a zoomed image', async ({ page }, testInfo) => {
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64')
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'large.png', mimeType: 'image/png', buffer: png })
+  if ((page.viewportSize()?.width ?? 1000) < 900) await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
+  await page.getByTestId('sidebar').getByText('large.png', { exact: true }).click()
+  const stage = page.locator('.image-stage')
+  for (let index = 0; index < 4; index += 1) await page.getByRole('button', { name: /Zoom in|放大/ }).click()
+  await expect(page.locator('.image-toolbar')).toContainText('200%')
+  const overflow = await stage.evaluate((element) => ({
+    horizontal: element.scrollWidth > element.clientWidth,
+    vertical: element.scrollHeight > element.clientHeight
+  }))
+  expect(overflow.horizontal).toBe(true)
+  expect(overflow.vertical).toBe(true)
+  await expect.poll(() => stage.evaluate((element) => element.scrollLeft > 0 && element.scrollTop > 0)).toBe(true)
+  const centered = await stage.evaluate((element) => ({
+    left: element.scrollLeft,
+    top: element.scrollTop,
+    maxLeft: element.scrollWidth - element.clientWidth,
+    maxTop: element.scrollHeight - element.clientHeight
+  }))
+  expect(centered.left).toBeGreaterThan(0)
+  expect(centered.top).toBeGreaterThan(0)
+  expect(centered.left).toBeLessThan(centered.maxLeft)
+  expect(centered.top).toBeLessThan(centered.maxTop)
+  const box = await stage.boundingBox()
+  expect(box).not.toBeNull()
+  if (testInfo.project.name === 'ipad') {
+    await stage.evaluate((element) => element.scrollTo({ left: 0, top: 0 }))
+  } else {
+    await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2)
+    await page.mouse.wheel(-320, -320)
+  }
+  await expect.poll(() => stage.evaluate((element, center) => element.scrollLeft < center.left && element.scrollTop < center.top, centered)).toBe(true)
+  if (testInfo.project.name === 'ipad') {
+    await stage.evaluate((element) => element.scrollTo({ left: element.scrollWidth, top: element.scrollHeight }))
+  } else {
+    await page.mouse.wheel(640, 640)
+  }
+  await expect.poll(() => stage.evaluate((element, center) => element.scrollLeft > center.left && element.scrollTop > center.top, centered)).toBe(true)
+})
+
+test('deletes a file with a trackpad-style left swipe', async ({ page }) => {
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'swipe-away.txt', mimeType: 'text/plain', buffer: Buffer.from('Delete me') })
+  if ((page.viewportSize()?.width ?? 1000) < 900) await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
+  const row = page.getByTestId('sidebar').locator('.tree-row', { hasText: 'swipe-away.txt' })
+  page.once('dialog', async (dialog) => dialog.accept())
+  await row.dispatchEvent('wheel', { deltaX: 96, deltaY: 0 })
+  await expect(row).toHaveCount(0)
+})
+
 test('keeps pinch-style zoom local to the text editor', async ({ page }) => {
   await page.locator('input[type=file]').first().setInputFiles({ name: 'zoom.txt', mimeType: 'text/plain', buffer: Buffer.from('Zoom') })
   if ((page.viewportSize()?.width ?? 1000) < 900) await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
