@@ -39,7 +39,6 @@ export default function App() {
   const setSidebarWidth = useWorkspace((state) => state.setSidebarWidth)
   const setSplitRatio = useWorkspace((state) => state.setSplitRatio)
   const setNotice = useWorkspace((state) => state.setNotice)
-  const setSelectedNodeId = useWorkspace((state) => state.setSelectedNodeId)
   const fileInput = useRef<HTMLInputElement>(null)
   const folderInput = useRef<HTMLInputElement>(null)
   const narrow = useNarrow()
@@ -106,6 +105,8 @@ export default function App() {
     setConflict(null)
   }
 
+  const createQuickDocument = () => addFile('untitled.txt', '')
+
   const fromInput = (files: FileList | null, open = false) => {
     if (!files) return
     void importEntries(Array.from(files).map((file) => ({ file, path: (file as File & { webkitRelativePath?: string }).webkitRelativePath?.split('/').slice(0, -1).filter(Boolean) })), open)
@@ -151,8 +152,6 @@ export default function App() {
 
   const editorGroups = layout.groups as [EditorGroup, EditorGroup]
   const hasSecondary = Boolean(editorGroups[1].activeFileId)
-  const empty = Object.keys(nodes).length === 0
-
   return <Tooltip.Provider><WorkspaceDndProvider>
     <div className="app-shell">
       <main className="workbench">
@@ -165,16 +164,15 @@ export default function App() {
           </Panel>
           <Separator className="resize-handle" />
           <Panel id="editors" minSize="360px">
-            <EditorArea groups={editorGroups} hasSecondary={hasSecondary} splitRatio={layout.splitRatio} setSplitRatio={setSplitRatio} onDrop={(event) => handleDrop(event, true)} dragActive={dragTarget === 'editor'} setDragTarget={setDragTarget} />
+            <EditorArea groups={editorGroups} hasSecondary={hasSecondary} splitRatio={layout.splitRatio} setSplitRatio={setSplitRatio} onDrop={(event) => handleDrop(event, true)} dragActive={dragTarget === 'editor'} setDragTarget={setDragTarget} onNewDocument={createQuickDocument} onImportFiles={() => void pickFiles()} />
           </Panel>
         </Group> : <>
           <div className={`mobile-editor ${dragTarget === 'editor' ? 'drag-active' : ''}`}
-            onPointerDown={() => setSelectedNodeId(null)}
             onDragEnter={(event) => { if (event.dataTransfer.types.includes('Files')) setDragTarget('editor') }}
             onDragOver={(event) => event.preventDefault()}
             onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragTarget(null) }}
             onDrop={(event) => handleDrop(event, true)}>
-            <EditorPane group={editorGroups.find((group) => group.id === layout.activeMobileGroup) ?? editorGroups[0]} leading={<>
+            <EditorPane group={editorGroups.find((group) => group.id === layout.activeMobileGroup) ?? editorGroups[0]} onNewDocument={createQuickDocument} onImportFiles={() => void pickFiles()} leading={<>
               <IconButton icon={layout.sidebarOpen ? X : Menu} label={t('files')} onClick={() => setSidebarOpen(!layout.sidebarOpen)} />
               {hasSecondary && <div className="group-switch" role="tablist" aria-label={t('editor')}>
                 {editorGroups.map((group, index) => <button key={group.id} className={layout.activeMobileGroup === group.id ? 'active' : ''} onClick={() => setActiveMobileGroup(group.id)}>{index + 1}</button>)}
@@ -184,10 +182,6 @@ export default function App() {
           </div>
           {layout.sidebarOpen && <><button className="drawer-scrim" aria-label={t('close')} onClick={() => setSidebarOpen(false)} /><div className="sidebar-drawer"><Sidebar onImportFiles={() => void pickFiles()} onImportFolder={() => void pickFolder()} /></div></>}
         </>}
-        {empty && <div className="empty-state" style={{ left: narrow ? 0 : layout.sidebarWidth + 1 }}>
-          <div className="empty-symbol">Aa</div><h1>{t('emptyTitle')}</h1><p>{t('emptyBody')}</p>
-          <div className="empty-actions"><button className="primary-button" onClick={() => addFile('untitled.txt', '')}><FilePlus2 size={18} />{t('newFile')}</button><button className="secondary-button" onClick={() => void pickFiles()}><Upload size={18} />{t('importFiles')}</button><button className="secondary-button" onClick={() => void pickFolder()}><FolderInput size={18} />{t('importFolder')}</button></div>
-        </div>}
       </main>
       {notice && <div className="toast" role="alert"><span>{t(notice)}</span><button onClick={() => setNotice(null)}><X size={17} /><span className="sr-only">{t('dismiss')}</span></button></div>}
       <Dialog.Root open={Boolean(conflict)} onOpenChange={(open) => { if (!open && conflict) finishConflict('skip') }}>
@@ -207,7 +201,7 @@ export default function App() {
   </WorkspaceDndProvider></Tooltip.Provider>
 }
 
-function EditorArea({ groups, hasSecondary, splitRatio, setSplitRatio, onDrop, dragActive, setDragTarget }: {
+function EditorArea({ groups, hasSecondary, splitRatio, setSplitRatio, onDrop, dragActive, setDragTarget, onNewDocument, onImportFiles }: {
   groups: [EditorGroup, EditorGroup]
   hasSecondary: boolean
   splitRatio: number
@@ -215,15 +209,16 @@ function EditorArea({ groups, hasSecondary, splitRatio, setSplitRatio, onDrop, d
   onDrop: (event: React.DragEvent) => void
   dragActive: boolean
   setDragTarget: (target: 'tree' | 'editor' | null) => void
+  onNewDocument: () => void
+  onImportFiles: () => void
 }) {
   const { t } = useTranslation()
-  const setSelectedNodeId = useWorkspace((state) => state.setSelectedNodeId)
-  return <div className={`editor-area ${dragActive ? 'drag-active' : ''}`} onPointerDown={() => setSelectedNodeId(null)} onDragEnter={(event) => { if (event.dataTransfer.types.includes('Files')) setDragTarget('editor') }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragTarget(null) }} onDrop={onDrop}>
+  return <div className={`editor-area ${dragActive ? 'drag-active' : ''}`} onDragEnter={(event) => { if (event.dataTransfer.types.includes('Files')) setDragTarget('editor') }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragTarget(null) }} onDrop={onDrop}>
     {hasSecondary ? <Group orientation="horizontal" id="editor-layout" onLayoutChanged={(value, meta) => { if (meta.isUserInteraction) setSplitRatio(value.primary ?? splitRatio) }}>
-      <Panel id="primary" defaultSize={splitRatio} minSize="25%"><EditorPane group={groups[0]} /></Panel>
+      <Panel id="primary" defaultSize={splitRatio} minSize="25%"><EditorPane group={groups[0]} onNewDocument={onNewDocument} onImportFiles={onImportFiles} /></Panel>
       <Separator className="resize-handle editor-resize" />
-      <Panel id="secondary" defaultSize={100 - splitRatio} minSize="25%"><EditorPane group={groups[1]} /></Panel>
-    </Group> : <EditorPane group={groups[0]} />}
+      <Panel id="secondary" defaultSize={100 - splitRatio} minSize="25%"><EditorPane group={groups[1]} onNewDocument={onNewDocument} onImportFiles={onImportFiles} /></Panel>
+    </Group> : <EditorPane group={groups[0]} onNewDocument={onNewDocument} onImportFiles={onImportFiles} />}
     {dragActive && <div className="drop-overlay editor-drop"><Upload size={28} />{t('dropEditor')}</div>}
     <EditorDropZones />
   </div>

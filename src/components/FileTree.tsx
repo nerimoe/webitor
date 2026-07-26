@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import { ChevronRight, FileText, Folder, FolderOpen, GripVertical } from 'lucide-react'
@@ -16,6 +16,9 @@ function TreeRow({ node, depth }: { node: FileNode; depth: number }) {
   const { attributes, listeners, setNodeRef: setDraggableRef, isDragging } = useDraggable({ id: node.id })
   const { setNodeRef: setDroppableRef } = useDroppable({ id: `row:${node.id}` })
   const { dropHint } = useWorkspaceDrag()
+  const swipeStart = useRef<{ pointerId: number; x: number } | null>(null)
+  const suppressClick = useRef(false)
+  const [swipeOffset, setSwipeOffset] = useState(0)
   const active = selectedNodeId === node.id
   const children = useMemo(() => Object.values(nodes).filter((child) => child.parentId === node.id).sort((a, b) => a.kind === b.kind ? a.order - b.order : a.kind === 'directory' ? -1 : 1), [nodes, node.id])
   const isOpen = expanded.includes(node.id)
@@ -28,6 +31,31 @@ function TreeRow({ node, depth }: { node: FileNode; depth: number }) {
   const remove = () => {
     if (window.confirm(t('confirmDelete', { name: node.name }))) deleteNode(node.id)
   }
+  const beginSwipe = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (node.kind !== 'file' || event.pointerType !== 'touch' || (event.target as HTMLElement).closest('.tree-grip')) return
+    swipeStart.current = { pointerId: event.pointerId, x: event.clientX }
+  }
+  const moveSwipe = (event: React.PointerEvent<HTMLDivElement>) => {
+    const start = swipeStart.current
+    if (!start || start.pointerId !== event.pointerId) return
+    const distance = Math.min(0, event.clientX - start.x)
+    if (distance < -8) {
+      event.preventDefault()
+      setSwipeOffset(Math.max(-108, distance))
+    }
+  }
+  const finishSwipe = (event: React.PointerEvent<HTMLDivElement>) => {
+    const start = swipeStart.current
+    if (!start || start.pointerId !== event.pointerId) return
+    const distance = event.clientX - start.x
+    swipeStart.current = null
+    if (distance < -84) remove()
+    if (Math.abs(distance) > 8) {
+      suppressClick.current = true
+      window.setTimeout(() => { suppressClick.current = false }, 0)
+    }
+    setSwipeOffset(0)
+  }
 
   return <>
     <ContextMenu.Root>
@@ -37,16 +65,20 @@ function TreeRow({ node, depth }: { node: FileNode; depth: number }) {
           className={`tree-row ${active ? 'active' : ''} ${isDragging ? 'dragging' : ''} ${dropHint?.nodeId === node.id ? `drop-${dropHint.mode}` : ''}`}
           data-node-id={node.id}
           data-parent-id={node.parentId ?? ''}
-          style={{ paddingInlineStart: 8 + depth * 16 }}
+          style={{ paddingInlineStart: 8 + depth * 16, transform: swipeOffset ? `translateX(${swipeOffset}px)` : undefined }}
           {...attributes}
           tabIndex={0}
-          onClick={() => { setSelectedNodeId(node.id); node.kind === 'directory' ? toggleExpanded(node.id) : openFile(node.id) }}
+          onClick={(event) => { if (suppressClick.current) { event.preventDefault(); return }; setSelectedNodeId(node.id); node.kind === 'directory' ? toggleExpanded(node.id) : openFile(node.id) }}
           onDoubleClick={() => node.kind === 'file' && openFile(node.id)}
           onContextMenu={() => setSelectedNodeId(node.id)}
           onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === 'F2') { event.preventDefault(); rename() }
             if (event.key === 'Delete') { event.preventDefault(); remove() }
           }}
+          onPointerDown={beginSwipe}
+          onPointerMove={moveSwipe}
+          onPointerUp={finishSwipe}
+          onPointerCancel={finishSwipe}
           {...listeners}
         >
           <span className="tree-grip" aria-hidden="true"><GripVertical size={14} /></span>

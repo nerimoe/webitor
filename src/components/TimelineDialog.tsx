@@ -1,18 +1,19 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { Clock3, RotateCcw, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useWorkspace } from '../store/useWorkspace'
-import { IconButton } from './IconButton'
 import type { FileRevision } from '../types'
 
 const emptyRevisions: FileRevision[] = []
 
-export function TimelineDialog({ fileId }: { fileId: string }) {
+export function TimelineDialog({ fileId, trigger, open: controlledOpen, onOpenChange }: { fileId: string; trigger?: ReactNode; open?: boolean; onOpenChange?: (open: boolean) => void }) {
   const { t, i18n } = useTranslation()
   const revisions = useWorkspace((state) => state.revisions[fileId] ?? emptyRevisions)
   const restoreRevision = useWorkspace((state) => state.restoreRevision)
-  const [open, setOpen] = useState(false)
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
+  const open = controlledOpen ?? uncontrolledOpen
+  const setOpen = onOpenChange ?? setUncontrolledOpen
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const ordered = [...revisions].reverse()
   const selected = revisions.find((revision) => revision.id === selectedId) ?? ordered[0]
@@ -20,7 +21,7 @@ export function TimelineDialog({ fileId }: { fileId: string }) {
   const formatter = new Intl.DateTimeFormat(i18n.language, { dateStyle: 'medium', timeStyle: 'short' })
 
   return <Dialog.Root open={open} onOpenChange={setOpen}>
-    <Dialog.Trigger asChild><IconButton icon={Clock3} label={t('timeline')} /></Dialog.Trigger>
+    {trigger && <Dialog.Trigger asChild>{trigger}</Dialog.Trigger>}
     <Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="timeline-dialog">
       <div className="timeline-heading"><div><Dialog.Title>{t('timeline')}</Dialog.Title><Dialog.Description>{t('timelineDescription')}</Dialog.Description></div><Dialog.Close asChild><button aria-label={t('close')}><X size={20} /></button></Dialog.Close></div>
       <div className="timeline-body">

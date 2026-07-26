@@ -17,6 +17,7 @@ export const initialPersistedState = (): PersistedState => ({
   layout: {
     sidebarWidth: 260,
     splitRatio: 50,
+    editorFontSize: 16,
     sidebarOpen: false,
     activeMobileGroup: 'primary',
     groups: [
@@ -60,6 +61,7 @@ interface WorkspaceStore extends PersistedState {
   setActiveMobileGroup: (group: EditorGroup['id']) => void
   setSidebarWidth: (width: number) => void
   setSplitRatio: (ratio: number) => void
+  setEditorFontSize: (size: number) => void
   setSelectedNodeId: (nodeId: string | null) => void
   setNotice: (notice: string | null) => void
 }
@@ -104,13 +106,14 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
     try {
       const stored = await loadState()
       if (stored) {
+        const defaults = initialPersistedState()
         const revisions = { ...(stored.revisions ?? {}) }
         Object.values(stored.contents).forEach((content) => {
           if (content.contentKind !== 'image' && !revisions[content.fileId]?.length) {
             revisions[content.fileId] = [{ id: id(), fileId: content.fileId, text: content.text, createdAt: content.cachedAt ?? stored.workspace.updatedAt, version: content.version }]
           }
         })
-        set({ ...stored, revisions, hydrated: true })
+        set({ ...stored, revisions, layout: { ...defaults.layout, ...stored.layout, groups: stored.layout.groups ?? defaults.layout.groups }, hydrated: true })
       }
       else set({ hydrated: true })
     } catch {
@@ -376,32 +379,41 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
       selectedNodeId: secondary.activeFileId
     }
   }),
-  closeGroup: (groupId) => set((state) => {
-    const [primary, secondary] = state.layout.groups
-    if (groupId === 'primary' && secondary.activeFileId) {
-      return {
-        layout: {
-          ...state.layout,
-          activeMobileGroup: 'primary',
-          groups: [
-            {
-              ...secondary,
-              id: 'primary',
-              tabs: secondary.activeFileId && !secondary.tabs.includes(secondary.activeFileId)
-                ? [...secondary.tabs, secondary.activeFileId]
-                : secondary.tabs
-            },
-            { id: 'secondary', tabs: [], activeFileId: null, view: 'editor' }
-          ]
-        },
-        selectedNodeId: secondary.activeFileId
+  closeGroup: (groupId) => {
+    set((state) => {
+      const [primary, secondary] = state.layout.groups
+      if (groupId === 'primary' && secondary.activeFileId) {
+        return {
+          layout: {
+            ...state.layout,
+            activeMobileGroup: 'primary',
+            groups: [
+              {
+                ...secondary,
+                id: 'primary',
+                tabs: !secondary.tabs.includes(secondary.activeFileId)
+                  ? [...secondary.tabs, secondary.activeFileId]
+                  : secondary.tabs
+              },
+              { id: 'secondary', tabs: [], activeFileId: null, view: 'editor' }
+            ]
+          },
+          selectedNodeId: secondary.activeFileId
+        }
       }
-    }
-    if (groupId === 'secondary') {
-      return { layout: { ...state.layout, activeMobileGroup: 'primary', groups: [primary, { ...secondary, activeFileId: null, view: 'editor' }] } }
-    }
-    return { layout: { ...state.layout, groups: [{ ...primary, activeFileId: null }, secondary] } }
-  }),
+      if (groupId === 'secondary') {
+        return {
+          layout: { ...state.layout, activeMobileGroup: 'primary', groups: [primary, { ...secondary, activeFileId: null, view: 'editor' }] },
+          selectedNodeId: primary.activeFileId
+        }
+      }
+      return {
+        layout: { ...state.layout, groups: [{ ...primary, activeFileId: null, view: 'editor' }, secondary] },
+        selectedNodeId: null
+      }
+    })
+    void get().persist()
+  },
   restoreRevision: (fileId, revisionId) => {
     const revision = get().revisions[fileId]?.find((entry) => entry.id === revisionId)
     if (revision) get().updateContent(fileId, revision.text)
@@ -413,6 +425,10 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
   setActiveMobileGroup: (activeMobileGroup) => set((state) => ({ layout: { ...state.layout, activeMobileGroup } })),
   setSidebarWidth: (sidebarWidth) => set((state) => ({ layout: { ...state.layout, sidebarWidth } })),
   setSplitRatio: (splitRatio) => set((state) => ({ layout: { ...state.layout, splitRatio } })),
+  setEditorFontSize: (editorFontSize) => {
+    set((state) => ({ layout: { ...state.layout, editorFontSize: Math.max(12, Math.min(28, editorFontSize)) } }))
+    void get().persist()
+  },
   setSelectedNodeId: (selectedNodeId) => set({ selectedNodeId }),
   setNotice: (notice) => set({ notice })
 }))

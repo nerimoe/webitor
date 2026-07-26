@@ -20,7 +20,7 @@ export const resources = {
     saveFailed: 'The file could not be saved. Your cached copy is still available.', retry: 'Retry', dismiss: 'Dismiss',
     confirmDelete: 'Delete “{{name}}” and its contents?', fileName: 'File name', folderName: 'Folder name',
     collisionTitle: 'A file already exists', collisionBody: '“{{name}}” already exists in this folder.', overwrite: 'Replace', keepBoth: 'Keep both', skip: 'Skip', applyAll: 'Use for all conflicts',
-    install: 'Install app', offline: 'Offline ready', noFile: 'Select a file to start editing',
+    install: 'Install app', offline: 'Offline ready', noFile: 'Select a file to start editing', noFileTitle: 'No document open', noFileBody: 'Choose a document from the list, or start a new one here.', closeFile: 'Close document', renameFile: 'Rename document', increaseTextSize: 'Increase text size', decreaseTextSize: 'Decrease text size',
     touchHint: 'Long-press files for more actions', copied: 'Copied', importFailed: 'Some files could not be imported.'
   } },
   'zh-CN': { translation: {
@@ -41,7 +41,7 @@ export const resources = {
     saveFailed: '无法保存此文件，缓存副本仍然可用。', retry: '重试', dismiss: '关闭',
     confirmDelete: '删除“{{name}}”及其中全部内容？', fileName: '文件名', folderName: '文件夹名',
     collisionTitle: '文件已存在', collisionBody: '此文件夹中已经存在“{{name}}”。', overwrite: '覆盖', keepBoth: '保留两份', skip: '跳过', applyAll: '应用到本批次全部冲突',
-    install: '安装应用', offline: '已可离线使用', noFile: '选择一个文件开始编辑',
+    install: '安装应用', offline: '已可离线使用', noFile: '选择一个文件开始编辑', noFileTitle: '没有打开的文档', noFileBody: '从左侧选择一份文档，或直接在这里开始新建。', closeFile: '关闭文档', renameFile: '重命名文档', increaseTextSize: '增大文字', decreaseTextSize: '减小文字',
     touchHint: '长按文件可查看更多操作', copied: '已复制', importFailed: '部分文件无法导入。'
   } }
 } as const

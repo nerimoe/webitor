@@ -5,7 +5,6 @@ import { FileImage, FileText, Search, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useWorkspace } from '../store/useWorkspace'
 import type { FileNode } from '../types'
-import { IconButton } from './IconButton'
 
 interface SearchRecord {
   id: string
@@ -28,14 +27,13 @@ function nodePath(node: FileNode, nodes: Record<string, FileNode>) {
   return parts.join(' / ')
 }
 
-export function GlobalSearch() {
+export function GlobalSearch({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { t } = useTranslation()
   const nodes = useWorkspace((state) => state.nodes)
   const contents = useWorkspace((state) => state.contents)
   const openFile = useWorkspace((state) => state.openFile)
   const setPendingReveal = useWorkspace((state) => state.setPendingReveal)
   const setSidebarOpen = useWorkspace((state) => state.setSidebarOpen)
-  const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(0)
 
@@ -78,12 +76,11 @@ export function GlobalSearch() {
       const from = record.from + Math.max(0, direct)
       setPendingReveal({ fileId: record.fileId, from, to: from + Math.max(1, direct >= 0 ? query.length : record.text.length) })
     }
-    setOpen(false)
+    onOpenChange(false)
     setSidebarOpen(false)
   }
 
-  return <Dialog.Root open={open} onOpenChange={(value) => { setOpen(value); if (value) { setQuery(''); setSelected(0) } }}>
-    <Dialog.Trigger asChild><IconButton icon={Search} label={t('globalSearch')} /></Dialog.Trigger>
+  return <Dialog.Root open={open} onOpenChange={(value) => { onOpenChange(value); if (value) { setQuery(''); setSelected(0) } }}>
     <Dialog.Portal>
       <Dialog.Overlay className="dialog-overlay" />
       <Dialog.Content className="search-dialog" aria-describedby={undefined}>

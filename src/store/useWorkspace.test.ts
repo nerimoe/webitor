@@ -66,6 +66,14 @@ describe('workspace store', () => {
     expect(useWorkspace.getState().layout.groups[1].activeFileId).toBeNull()
   })
 
+  it('can close the only open document without deleting it from the workspace', () => {
+    const file = useWorkspace.getState().addFile('note.txt', 'note')
+    useWorkspace.getState().closeGroup('primary')
+    const state = useWorkspace.getState()
+    expect(state.layout.groups[0].activeFileId).toBeNull()
+    expect(state.nodes[file].name).toBe('note.txt')
+  })
+
   it('reorders sibling documents without losing their order', () => {
     const first = useWorkspace.getState().addFile('first.txt', '', { open: false })
     const second = useWorkspace.getState().addFile('second.txt', '', { open: false })

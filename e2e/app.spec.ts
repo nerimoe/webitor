@@ -71,6 +71,27 @@ test('renames the selected file with Enter', async ({ page }) => {
   await expect(page.getByTestId('sidebar').getByText('renamed.txt', { exact: true })).toBeVisible()
 })
 
+test('can close the last open document and start another from the editor', async ({ page }) => {
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'close-me.txt', mimeType: 'text/plain', buffer: Buffer.from('Close me') })
+  if ((page.viewportSize()?.width ?? 1000) < 900) await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
+  await page.getByTestId('sidebar').getByText('close-me.txt', { exact: true }).click()
+  await page.getByRole('button', { name: /Close document|关闭文档/ }).click()
+  await expect(page.getByTestId('no-file-state')).toBeVisible()
+  await page.getByTestId('no-file-state').getByRole('button', { name: /New file|新建文件/ }).click()
+  await expect(page.locator('.document-title')).toContainText('untitled')
+})
+
+test('renames a document directly from its title', async ({ page }) => {
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'quick-name.txt', mimeType: 'text/plain', buffer: Buffer.from('Text') })
+  if ((page.viewportSize()?.width ?? 1000) < 900) await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
+  await page.getByTestId('sidebar').getByText('quick-name.txt', { exact: true }).click()
+  await page.locator('.title-button').click()
+  await page.locator('.title-rename').fill('renamed-inline.txt')
+  await page.locator('.title-rename').press('Enter')
+  if ((page.viewportSize()?.width ?? 1000) < 900) await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
+  await expect(page.getByTestId('sidebar').getByText('renamed-inline.txt', { exact: true })).toBeVisible()
+})
+
 test('shows Markdown preview without a duplicate editor toolbar', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name === 'ipad')
   await page.locator('input[type=file]').first().setInputFiles({ name: 'README.md', mimeType: 'text/markdown', buffer: Buffer.from('# Preview') })
@@ -194,6 +215,29 @@ test('imports and previews an image document', async ({ page }, testInfo) => {
   await page.getByTestId('sidebar').getByText('pixel.png', { exact: true }).click()
   await expect(page.locator('.image-preview img')).toBeVisible()
   await expect.poll(() => page.locator('.image-preview img').evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0)
+  await page.locator('.image-stage').dispatchEvent('wheel', { ctrlKey: true, deltaY: -100 })
+  await expect(page.locator('.image-toolbar')).toContainText('110%')
+})
+
+test('keeps pinch-style zoom local to the text editor', async ({ page }) => {
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'zoom.txt', mimeType: 'text/plain', buffer: Buffer.from('Zoom') })
+  if ((page.viewportSize()?.width ?? 1000) < 900) await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
+  await page.getByTestId('sidebar').getByText('zoom.txt', { exact: true }).click()
+  const editor = page.locator('.code-editor')
+  const before = await page.locator('.cm-scroller').evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize))
+  await editor.dispatchEvent('wheel', { ctrlKey: true, deltaY: -100 })
+  await expect.poll(() => page.locator('.cm-scroller').evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThan(before)
+  await expect.poll(() => page.evaluate(() => window.visualViewport?.scale ?? 1)).toBe(1)
+})
+
+test('uses one share action for file output on iPad', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'ipad')
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'share.txt', mimeType: 'text/plain', buffer: Buffer.from('Share') })
+  await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
+  await page.getByTestId('sidebar').getByText('share.txt', { exact: true }).click()
+  const editor = page.getByTestId('editor-primary')
+  await expect(editor.getByRole('button', { name: /Share|分享/ })).toBeVisible()
+  await expect(editor.getByRole('button', { name: /^Save$|^保存$/ })).toHaveCount(0)
 })
 
 test('reorders documents by dropping above another document', async ({ page }, testInfo) => {
