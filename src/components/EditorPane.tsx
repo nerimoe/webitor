@@ -60,7 +60,7 @@ export function EditorPane({ group, leading, onNewDocument, onImportFiles }: Edi
   const [timelineOpen, setTimelineOpen] = useState(false)
   const ref = useRef<ReactCodeMirrorRef>(null)
   const titleInput = useRef<HTMLInputElement>(null)
-  const codeZoomRef = useLocalZoom<HTMLDivElement>(editorFontSize, setEditorFontSize, { min: 12, max: 28, step: 1 })
+  const { ref: codeZoomRef } = useLocalZoom<HTMLDivElement>(editorFontSize, setEditorFontSize, { min: 12, max: 28, step: 1 })
   const fileId = group.activeFileId
   const node = fileId ? nodes[fileId] : undefined
   const content = fileId ? contents[fileId] : undefined

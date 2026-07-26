@@ -160,6 +160,22 @@ test('expands every sidebar command when the sidebar is wide enough', async ({ p
   await expect(page.locator('aside.sidebar')).toBeVisible()
 })
 
+test('starts resizing from the expanded separator hit target', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium')
+  await page.setViewportSize({ width: 1400, height: 720 })
+  const sidebar = page.locator('#sidebar[data-panel]')
+  const handle = page.locator('.sidebar-resize')
+  const before = await sidebar.boundingBox()
+  const handleBox = await handle.boundingBox()
+  expect(before).not.toBeNull()
+  expect(handleBox).not.toBeNull()
+  await page.mouse.move(handleBox!.x - 8, handleBox!.y + handleBox!.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(handleBox!.x + 72, handleBox!.y + handleBox!.height / 2)
+  await page.mouse.up()
+  await expect.poll(async () => (await sidebar.boundingBox())!.width).toBeGreaterThan(before!.width + 50)
+})
+
 test('shows Markdown preview without a duplicate editor toolbar', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name === 'ipad')
   await page.locator('input[type=file]').first().setInputFiles({ name: 'README.md', mimeType: 'text/markdown', buffer: Buffer.from('# Preview') })
@@ -343,10 +359,12 @@ test('zooms an image around the midpoint of two touches', async ({ page }, testI
   }), center)
   await stage.dispatchEvent('pointerdown', { ...point(-40), pointerId: 1 })
   await stage.dispatchEvent('pointerdown', { ...point(40), pointerId: 2 })
-  await stage.dispatchEvent('pointermove', { ...point(-65), pointerId: 1 })
-  await stage.dispatchEvent('pointermove', { ...point(65), pointerId: 2 })
-  await stage.dispatchEvent('pointerup', { ...point(-65), pointerId: 1 })
-  await stage.dispatchEvent('pointerup', { ...point(65), pointerId: 2 })
+  for (let offset = 42; offset <= 70; offset += 2) {
+    await stage.dispatchEvent('pointermove', { ...point(-offset), pointerId: 1 })
+    await stage.dispatchEvent('pointermove', { ...point(offset), pointerId: 2 })
+  }
+  await stage.dispatchEvent('pointerup', { ...point(-70), pointerId: 1 })
+  await stage.dispatchEvent('pointerup', { ...point(70), pointerId: 2 })
   await expect(page.locator('.image-toolbar')).not.toContainText('100%')
   const after = await stage.evaluate((element, anchor) => ({
     x: (element.scrollLeft + anchor.x) / element.scrollWidth,

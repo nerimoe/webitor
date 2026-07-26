@@ -13,6 +13,11 @@ import { Sidebar } from './components/Sidebar'
 import { EditorDropZones, WorkspaceDndProvider } from './components/WorkspaceDnd'
 
 const SIDEBAR_COLLAPSE_THRESHOLD = 120
+const RESIZE_TARGET_SIZE = { coarse: 48, fine: 32 }
+
+const captureResizePointer = (event: React.PointerEvent<HTMLDivElement>) => {
+  try { event.currentTarget.setPointerCapture(event.pointerId) } catch { /* Browser keeps document-level dragging as a fallback. */ }
+}
 
 function useNarrow() {
   const [narrow, setNarrow] = useState(() => matchMedia('(max-width: 899px)').matches)
@@ -81,6 +86,7 @@ export default function App() {
   }, [sidebarPanelRef])
   const beginSidebarResize = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 || sidebarPanelRef.current?.isCollapsed()) return
+    captureResizePointer(event)
     const startX = event.clientX
     const startWidth = sidebarPanelRef.current?.getSize().inPixels ?? layout.sidebarWidth
     let triggered = false
@@ -204,7 +210,7 @@ export default function App() {
   return <Tooltip.Provider><WorkspaceDndProvider>
     <div className="app-shell">
       <main className="workbench">
-        {!narrow ? <Group orientation="horizontal" id="outer-layout" className={sidebarAnimating ? 'sidebar-animating' : undefined}>
+        {!narrow ? <Group orientation="horizontal" id="outer-layout" className={sidebarAnimating ? 'sidebar-animating' : undefined} resizeTargetMinimumSize={RESIZE_TARGET_SIZE}>
           <Panel id="sidebar" panelRef={sidebarPanelRef} defaultSize={`${layout.sidebarWidth}px`} minSize="220px" maxSize="480px" collapsible collapsedSize="0px" onResize={(size) => {
             const collapsed = size.inPixels < 1
             if (collapsed !== layout.sidebarCollapsed) setSidebarCollapsed(collapsed)
@@ -268,9 +274,9 @@ function EditorArea({ groups, hasSecondary, splitRatio, setSplitRatio, onDrop, d
 }) {
   const { t } = useTranslation()
   return <div className={`editor-area ${dragActive ? 'drag-active' : ''}`} onDragEnter={(event) => { if (event.dataTransfer.types.includes('Files')) setDragTarget('editor') }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragTarget(null) }} onDrop={onDrop}>
-    {hasSecondary ? <Group orientation="horizontal" id="editor-layout" onLayoutChanged={(value, meta) => { if (meta.isUserInteraction) setSplitRatio(value.primary ?? splitRatio) }}>
+    {hasSecondary ? <Group orientation="horizontal" id="editor-layout" resizeTargetMinimumSize={RESIZE_TARGET_SIZE} onLayoutChanged={(value, meta) => { if (meta.isUserInteraction) setSplitRatio(value.primary ?? splitRatio) }}>
       <Panel id="primary" defaultSize={splitRatio} minSize="25%"><EditorPane group={groups[0]} leading={leading} onNewDocument={onNewDocument} onImportFiles={onImportFiles} /></Panel>
-      <Separator className="resize-handle editor-resize" />
+      <Separator className="resize-handle editor-resize" onPointerDown={captureResizePointer} />
       <Panel id="secondary" defaultSize={100 - splitRatio} minSize="25%"><EditorPane group={groups[1]} onNewDocument={onNewDocument} onImportFiles={onImportFiles} /></Panel>
     </Group> : <EditorPane group={groups[0]} leading={leading} onNewDocument={onNewDocument} onImportFiles={onImportFiles} />}
     {dragActive && <div className="drop-overlay editor-drop"><Upload size={28} />{t('dropEditor')}</div>}

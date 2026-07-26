@@ -9,12 +9,12 @@ export function ImagePreview({ src, name }: { src: string; name: string }) {
   const [zoom, setZoom] = useState(100)
   const imageRef = useRef<HTMLImageElement>(null)
   const pendingAnchor = useRef<{ clientX: number; clientY: number; imageX: number; imageY: number } | null>(null)
-  const stageRef = useLocalZoom<HTMLDivElement>(zoom, setZoom, {
+  const { ref: stageRef, elementRef: stageElementRef } = useLocalZoom<HTMLDivElement>(zoom, setZoom, {
     min: 25,
     max: 400,
     step: 10,
     onZoomAt: (nextZoom, anchor: ZoomAnchor) => {
-      const stage = stageRef.current
+      const stage = stageElementRef.current
       const image = imageRef.current
       if (!stage || !image) { setZoom(nextZoom); return }
       const imageRect = image.getBoundingClientRect()
@@ -28,7 +28,7 @@ export function ImagePreview({ src, name }: { src: string; name: string }) {
     }
   })
   const centerImage = () => {
-    const stage = stageRef.current
+    const stage = stageElementRef.current
     if (!stage) return
     stage.scrollTo({
       left: Math.max(0, (stage.scrollWidth - stage.clientWidth) / 2),
@@ -36,7 +36,7 @@ export function ImagePreview({ src, name }: { src: string; name: string }) {
     })
   }
   useLayoutEffect(() => {
-    const stage = stageRef.current
+    const stage = stageElementRef.current
     const image = imageRef.current
     const anchor = pendingAnchor.current
     pendingAnchor.current = null

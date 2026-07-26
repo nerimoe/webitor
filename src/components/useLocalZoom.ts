@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 interface Options {
   min: number
@@ -26,22 +26,41 @@ const clamp = (value: number, { min, max }: Options) => Math.max(min, Math.min(m
 
 /** Handles trackpad pinch and iOS gesture events only inside the supplied surface. */
 export function useLocalZoom<T extends HTMLElement>(value: number, setValue: (value: number) => void, options: Options) {
-  const ref = useRef<T>(null)
+  const elementRef = useRef<T>(null)
+  const [element, setElement] = useState<T | null>(null)
+  const ref = useCallback((node: T | null) => {
+    elementRef.current = node
+    setElement(node)
+  }, [])
   const valueRef = useRef(value)
+  const optionsRef = useRef(options)
+  const setValueRef = useRef(setValue)
   const pinchStart = useRef<number | null>(null)
   const pointers = useRef(new Map<number, { x: number; y: number }>())
   const pointerStart = useRef<{ distance: number; value: number } | null>(null)
 
   useEffect(() => { valueRef.current = value }, [value])
+  optionsRef.current = options
+  setValueRef.current = setValue
 
   useEffect(() => {
-    const element = ref.current
     if (!element) return
+    let frame = 0
+    let queued: { value: number; anchor?: ZoomAnchor } | null = null
     const update = (next: number, anchor?: ZoomAnchor) => {
-      const value = Math.round(clamp(next, options))
+      const value = Math.round(clamp(next, optionsRef.current))
       valueRef.current = value
-      if (anchor && options.onZoomAt) options.onZoomAt(value, anchor)
-      else setValue(value)
+      queued = { value, anchor }
+      if (frame) return
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        const pending = queued
+        queued = null
+        if (!pending) return
+        const currentOptions = optionsRef.current
+        if (pending.anchor && currentOptions.onZoomAt) currentOptions.onZoomAt(pending.value, pending.anchor)
+        else setValueRef.current(pending.value)
+      })
     }
     const elementCenter = () => {
       const rect = element.getBoundingClientRect()
@@ -52,7 +71,7 @@ export function useLocalZoom<T extends HTMLElement>(value: number, setValue: (va
       event.preventDefault()
       const anchor = { clientX: event.clientX, clientY: event.clientY }
       pointerMemory.position = anchor
-      update(valueRef.current - Math.sign(event.deltaY || 1) * options.step, anchor)
+      update(valueRef.current - Math.sign(event.deltaY || 1) * optionsRef.current.step, anchor)
     }
     const onGestureStart = (event: Event) => {
       event.preventDefault()
@@ -113,8 +132,9 @@ export function useLocalZoom<T extends HTMLElement>(value: number, setValue: (va
       element.removeEventListener('pointermove', onPointerMove)
       element.removeEventListener('pointerup', onPointerEnd)
       element.removeEventListener('pointercancel', onPointerEnd)
+      if (frame) cancelAnimationFrame(frame)
     }
-  }, [options, setValue])
+  }, [element])
 
-  return ref
+  return { ref, elementRef }
 }
