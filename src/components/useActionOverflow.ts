@@ -17,7 +17,11 @@ export function useActionOverflow<T extends OverflowAction>(items: T[], options:
   useEffect(() => {
     const element = ref.current
     if (!element) return
-    const update = () => setWidth(element.getBoundingClientRect().width)
+    const update = () => {
+      const style = getComputedStyle(element)
+      const horizontalPadding = Number.parseFloat(style.paddingLeft) + Number.parseFloat(style.paddingRight)
+      setWidth(Math.max(0, element.clientWidth - horizontalPadding))
+    }
     update()
     if (typeof ResizeObserver === 'undefined') {
       window.addEventListener('resize', update)
@@ -30,7 +34,7 @@ export function useActionOverflow<T extends OverflowAction>(items: T[], options:
 
   if (width === null || width <= 0) return { ref, visible: items, overflow: [] as T[] }
 
-  const slots = Math.max(1, Math.floor((width - 2) / 44))
+  const slots = Math.max(1, Math.floor(width / 44))
   const fixedSlots = options.fixedSlots ?? 0
   const needsOverflow = options.alwaysOverflow || items.length + fixedSlots > slots
   const directSlots = needsOverflow

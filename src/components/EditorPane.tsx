@@ -155,9 +155,10 @@ export function EditorPane({ group, leading, onNewDocument, onImportFiles }: Edi
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content, fileId, group.id, group.view, iOS, image, markdown, node?.name, previewActive, splitActive, t])
   const { ref: actionsRef, visible: visibleActions, overflow: overflowActions } = useActionOverflow(actions, {
-    alwaysOverflow: !iOS && Boolean(fileId),
+    alwaysOverflow: Boolean(fileId) && (!iOS || !image),
     fixedSlots: 1
   })
+  const showMore = !iOS || !image || overflowActions.length > 0
 
   const renderAction = (action: DocumentAction) => <IconButton key={action.id} icon={action.icon} label={action.label} active={action.active} onClick={action.onClick} />
 
@@ -190,7 +191,7 @@ export function EditorPane({ group, leading, onNewDocument, onImportFiles }: Edi
         </div> : <div className="document-title no-document-title"><span>{t('noFileTitle')}</span></div>}
         {fileId && <div ref={actionsRef} className="editor-actions">
           {visibleActions.map(renderAction)}
-          {(!iOS || overflowActions.length > 0) && <DropdownMenu.Root>
+          {showMore && <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild><IconButton icon={MoreHorizontal} label={t('moreActions')} /></DropdownMenu.Trigger>
             <DropdownMenu.Portal><DropdownMenu.Content className="menu-content" align="end">
               {overflowActions.map(renderOverflowAction)}

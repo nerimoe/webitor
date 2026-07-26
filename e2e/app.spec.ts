@@ -92,11 +92,11 @@ test('renames a document directly from its title', async ({ page }) => {
   await expect(page.getByTestId('sidebar').getByText('renamed-inline.txt', { exact: true })).toBeVisible()
 })
 
-test('collapses document actions before the title and keeps close at the far right', async ({ page }) => {
+test('preserves the file name and expands document actions when space returns', async ({ page }) => {
   await page.setViewportSize({ width: 440, height: 720 })
-  await page.locator('input[type=file]').first().setInputFiles({ name: 'a-document-with-a-readable-long-name.txt', mimeType: 'text/plain', buffer: Buffer.from('Text') })
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'untitled.txt', mimeType: 'text/plain', buffer: Buffer.from('Text') })
   await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
-  await page.getByTestId('sidebar').getByText('a-document-with-a-readable-long-name.txt', { exact: true }).click()
+  await page.getByTestId('sidebar').getByText('untitled.txt', { exact: true }).click()
   const bar = page.locator('.document-bar')
   const actions = bar.locator('.editor-actions')
   const more = actions.getByRole('button', { name: /More actions|更多操作/ })
@@ -109,7 +109,12 @@ test('collapses document actions before the title and keeps close at the far rig
   expect(moreBox).not.toBeNull()
   expect(closeBox).not.toBeNull()
   expect(closeBox!.x).toBeGreaterThan(moreBox!.x)
-  expect((await bar.locator('.document-title').boundingBox())!.width).toBeGreaterThanOrEqual(132)
+  await expect(bar.locator('.title-button span')).toHaveText('untitled.txt')
+  expect(await bar.locator('.title-button span').evaluate((title) => title.scrollWidth <= title.clientWidth)).toBe(true)
+
+  await page.setViewportSize({ width: 1000, height: 720 })
+  await expect(actions.getByRole('button', { name: /Editing timeline|编辑时间线/ })).toBeVisible()
+  await expect(page.getByTestId('sidebar').getByRole('button', { name: /Settings|设置/ })).toBeVisible()
 })
 
 test('shows Markdown preview without a duplicate editor toolbar', async ({ page }, testInfo) => {

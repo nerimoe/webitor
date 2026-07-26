@@ -115,7 +115,7 @@ button:focus-visible, [role="menuitem"]:focus-visible { outline: 2px solid var(-
 .preview-toolbar { position: absolute; z-index: 4; top: 8px; right: 10px; display: flex; padding: 0 2px; border: 1px solid var(--border); border-radius: 6px; background: color-mix(in srgb, var(--surface) 92%, transparent); box-shadow: var(--shadow); backdrop-filter: blur(8px); }
 .document-bar { min-width: 0; height: 54px; display: flex; align-items: center; border-bottom: 1px solid var(--border); background: var(--surface); }
 .document-leading { flex: 0 0 auto; display: flex; align-items: center; padding-left: max(2px, env(safe-area-inset-left)); }
-.document-title { min-width: 0; flex: 1 0 clamp(132px, 32%, 220px); padding: 0 16px; display: flex; align-items: center; gap: 9px; color: var(--text); font-size: 15px; font-weight: 600; }
+.document-title { min-width: 0; max-width: min(360px, 45%); flex: 0 0 auto; padding: 0 16px; display: flex; align-items: center; gap: 9px; color: var(--text); font-size: 15px; font-weight: 600; }
 .document-title svg { flex: 0 0 auto; color: var(--text-muted); }
 .title-button { min-width: 0; flex: 1; padding: 7px 3px; overflow: hidden; border: 0; border-radius: 4px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: text; }
 .title-button:hover, .title-button:focus-visible { background: var(--surface-2); outline: none; }
@@ -123,7 +123,7 @@ button:focus-visible, [role="menuitem"]:focus-visible { outline: 2px solid var(-
 .title-rename { min-width: 0; flex: 1; height: 34px; padding: 0 8px; border: 1px solid var(--accent); border-radius: 4px; outline: none; background: var(--surface); color: var(--text); font: inherit; }
 .no-document-title { color: var(--text-muted); font-weight: 500; }
 .dirty-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
-.editor-actions { min-width: 44px; max-width: calc(100% - 76px); flex: 0 1 396px; display: flex; align-items: center; justify-content: flex-end; overflow: hidden; border-left: 1px solid var(--border); padding: 0 3px; background: var(--surface); }
+.editor-actions { min-width: 88px; flex: 1 1 auto; display: flex; align-items: center; justify-content: flex-end; overflow: hidden; border-left: 1px solid var(--border); padding: 0 3px; background: var(--surface); }
 .code-editor, .code-editor > div, .code-editor .cm-editor { height: 100%; min-height: 0; }
 .code-editor { touch-action: pan-y; }
 .code-editor .cm-editor { background: var(--surface); color: var(--text); }
@@ -258,7 +258,6 @@ button:focus-visible, [role="menuitem"]:focus-visible { outline: 2px solid var(-
   .sidebar-drawer { position: absolute; z-index: 60; inset: 0 auto 0 0; width: min(84vw, 340px); box-shadow: var(--shadow); animation: slide-in 160ms ease-out; }
   .no-file-state { padding: 24px; }
   .no-file-state h1 { font-size: 18px; }
-  .editor-actions { flex-basis: 300px; }
   .markdown-preview { padding: 22px 20px 70px; }
   .search-result-path { display: none; }
   .timeline-dialog { height: min(720px, calc(100dvh - 20px)); }
