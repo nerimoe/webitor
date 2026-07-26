@@ -72,6 +72,15 @@ test('creates a compressed share link that imports and opens the document', asyn
   await expect.poll(() => page.url()).not.toContain('#share=')
 })
 
+test('explains missing and corrupt shared file data', async ({ page }) => {
+  await page.goto('/?webitor-share=1')
+  await expect(page.getByRole('alert')).toContainText(/missing|缺少|truncated|截断/i)
+  await expect.poll(() => page.url()).not.toContain('webitor-share')
+  await page.goto('/?webitor-share=1#share=u.invalid')
+  await expect(page.getByRole('alert')).toContainText(/corrupt|损坏|不完整/i)
+  await expect.poll(() => page.url()).not.toContain('#share=')
+})
+
 test('offers split and single-view targets for external editor drops', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'chromium')
   await page.locator('input[type=file]').first().setInputFiles({ name: 'current.txt', mimeType: 'text/plain', buffer: Buffer.from('Current') })

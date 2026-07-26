@@ -5,7 +5,7 @@ import * as Tooltip from '@radix-ui/react-tooltip'
 import { FilePlus2, FolderInput, Menu, PanelLeft, PanelLeftOpen, Upload, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { collectDirectory, collectDroppedItems, fileToDataUrl, isProbablyText, isSupportedImage } from './lib/files'
-import { readFileShareHash } from './lib/shareLink'
+import { cleanFileShareUrl, hasFileShareMarker, readFileShareHash, ShareLinkError } from './lib/shareLink'
 import { useWorkspace } from './store/useWorkspace'
 import type { EditorGroup } from './types'
 import { EditorPane } from './components/EditorPane'
@@ -67,14 +67,31 @@ export default function App() {
     if (!hydrated) return
     const importSharedFile = () => {
       const hash = location.hash
-      if (!hash.startsWith('#share=') || importedShareHash.current === hash) return
+      if (!hash.startsWith('#share=')) {
+        if (hasFileShareMarker()) {
+          cleanFileShareUrl()
+          setNotice('sharedFileMissing')
+        }
+        return
+      }
+      if (importedShareHash.current === hash) return
       importedShareHash.current = hash
-      history.replaceState(null, '', `${location.pathname}${location.search}`)
+      cleanFileShareUrl()
       void readFileShareHash(hash).then((shared) => {
         if (!shared) return
         addFile(shared.name, shared.text, { source: 'drop', dataUrl: shared.dataUrl, mimeType: shared.mimeType, open: true, groupId: 'primary' })
         setSidebarOpen(false)
-      }).catch(() => setNotice('sharedFileInvalid'))
+      }).catch((error) => {
+        if (!(error instanceof ShareLinkError)) { setNotice('sharedFileCorrupt'); return }
+        const notices = {
+          invalid: 'sharedFileCorrupt',
+          tooLarge: 'sharedFileTooLarge',
+          unsupportedCompression: 'sharedFileCompressionUnsupported',
+          unsupportedImage: 'sharedFileUnsupportedImage',
+          unsupportedVersion: 'sharedFileUnsupportedVersion'
+        } as const
+        setNotice(notices[error.code])
+      })
     }
     importSharedFile()
     window.addEventListener('hashchange', importSharedFile)

@@ -11,7 +11,7 @@ import { Clock3, Download, Eye, EyeOff, FilePlus2, FileText, Link2, MoreHorizont
 import { useTranslation } from 'react-i18next'
 import { isMarkdown, loadLanguage } from '../lib/language'
 import { canShareBlob, dataUrlToBlob, shareBlob, shareTextFile } from '../lib/files'
-import { createFileShareUrl, shareOrCopyFileUrl } from '../lib/shareLink'
+import { createFileShareUrl, shareOrCopyFileUrl, ShareLinkError } from '../lib/shareLink'
 import { useWorkspace } from '../store/useWorkspace'
 import type { EditorGroup } from '../types'
 import { IconButton } from './IconButton'
@@ -157,7 +157,7 @@ export function EditorPane({ group, leading, onNewDocument, onImportFiles }: Edi
         const url = await createFileShareUrl({ name, text: content.text, dataUrl: content.dataUrl, mimeType: content.mimeType })
         const result = await shareOrCopyFileUrl(url, name)
         if (result === 'copied') setNotice(url.length > 60_000 ? 'shareLinkLarge' : 'shareLinkCopied')
-      } catch { setNotice('shareLinkFailed') }
+      } catch (error) { setNotice(error instanceof ShareLinkError && error.code === 'tooLarge' ? 'shareLinkTooLarge' : 'shareLinkFailed') }
     }
     if (!iOS) {
       next.push({ id: 'save', priority: 0, label: t(node?.handle ? 'save' : 'download'), icon: node?.handle ? Save : Download, onClick: () => void saveFile(fileId) })

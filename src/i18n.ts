@@ -21,7 +21,7 @@ export const resources = {
     confirmDelete: 'Delete “{{name}}” and its contents?', fileName: 'File name', folderName: 'Folder name',
     collisionTitle: 'A file already exists', collisionBody: '“{{name}}” already exists in this folder.', overwrite: 'Replace', keepBoth: 'Keep both', skip: 'Skip', applyAll: 'Use for all conflicts',
     install: 'Install app', offline: 'Offline ready', noFile: 'Select a file to start editing', noFileTitle: 'No document open', noFileBody: 'Choose a document from the list, or start a new one here.', closeFile: 'Close document', renameFile: 'Rename document', increaseTextSize: 'Increase text size', decreaseTextSize: 'Decrease text size', resetTextSize: 'Reset text size (current: {{size}} px)',
-    touchHint: 'Long-press files for more actions', copied: 'Copied', shareLinkCopied: 'Share link copied', shareLinkLarge: 'Share link copied. Some apps may not accept a link this long.', shareLinkFailed: 'Could not create the share link.', sharedFileInvalid: 'This shared file link is invalid or unsupported.', importFailed: 'Some files could not be imported.'
+    touchHint: 'Long-press files for more actions', copied: 'Copied', shareLinkCopied: 'Share link copied', shareLinkLarge: 'This link is long, so it was copied instead of sent to the system share sheet to prevent truncation.', shareLinkFailed: 'Could not create or copy the share link.', shareLinkTooLarge: 'This file is too large to store in a share link.', sharedFileMissing: 'The file data is missing from this link. The app used to share it may have truncated the URL.', sharedFileCorrupt: 'The shared file data is truncated or corrupt.', sharedFileTooLarge: 'The shared file expands beyond the 8 MB safety limit.', sharedFileCompressionUnsupported: 'This browser cannot decompress this shared file.', sharedFileUnsupportedImage: 'The shared link contains an unsupported image type.', sharedFileUnsupportedVersion: 'This share link was created by an unsupported Webitor version.', importFailed: 'Some files could not be imported.'
   } },
   'zh-CN': { translation: {
     files: '文件', workspace: '文档', newFile: '新建文件', newFolder: '新建文件夹', collapseSidebar: '隐藏文件列表', showSidebar: '显示文件列表',
@@ -42,7 +42,7 @@ export const resources = {
     confirmDelete: '删除“{{name}}”及其中全部内容？', fileName: '文件名', folderName: '文件夹名',
     collisionTitle: '文件已存在', collisionBody: '此文件夹中已经存在“{{name}}”。', overwrite: '覆盖', keepBoth: '保留两份', skip: '跳过', applyAll: '应用到本批次全部冲突',
     install: '安装应用', offline: '已可离线使用', noFile: '选择一个文件开始编辑', noFileTitle: '没有打开的文档', noFileBody: '从左侧选择一份文档，或直接在这里开始新建。', closeFile: '关闭文档', renameFile: '重命名文档', increaseTextSize: '增大文字', decreaseTextSize: '减小文字', resetTextSize: '重置字号（当前 {{size}} px）',
-    touchHint: '长按文件可查看更多操作', copied: '已复制', shareLinkCopied: '分享链接已复制', shareLinkLarge: '分享链接已复制，但部分应用可能不接受这么长的链接。', shareLinkFailed: '无法创建分享链接。', sharedFileInvalid: '分享链接无效或文件格式不受支持。', importFailed: '部分文件无法导入。'
+    touchHint: '长按文件可查看更多操作', copied: '已复制', shareLinkCopied: '分享链接已复制', shareLinkLarge: '链接较长，为避免系统分享截断，已改为复制完整链接。', shareLinkFailed: '无法创建或复制分享链接。', shareLinkTooLarge: '文件太大，无法存入分享链接。', sharedFileMissing: '链接中缺少文件数据，可能已被分享应用截断。', sharedFileCorrupt: '分享链接中的文件数据不完整或已损坏。', sharedFileTooLarge: '分享文件解压后超过 8 MB 安全限制。', sharedFileCompressionUnsupported: '当前浏览器无法解压此分享文件。', sharedFileUnsupportedImage: '分享链接中的图片格式不受支持。', sharedFileUnsupportedVersion: '此分享链接由不受支持的 Webitor 版本创建。', importFailed: '部分文件无法导入。'
   } }
 } as const
 
