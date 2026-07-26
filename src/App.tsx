@@ -4,10 +4,11 @@ import * as Dialog from '@radix-ui/react-dialog'
 import * as Tooltip from '@radix-ui/react-tooltip'
 import { FilePlus2, FolderInput, Menu, PanelLeft, PanelLeftOpen, Upload, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { collectDirectory, collectDroppedItems, fileToDataUrl, isProbablyText, isSupportedImage } from './lib/files'
+import { collectDirectory, collectDroppedItems } from './lib/files'
 import { cleanFileShareUrl, hasFileShareMarker, readFileShareHash, ShareLinkError } from './lib/shareLink'
 import { useWorkspace } from './store/useWorkspace'
 import type { EditorGroup } from './types'
+import { useImportWorkflow, type ImportItem, type ImportTarget } from './hooks/useImportWorkflow'
 import { EditorPane } from './components/EditorPane'
 import { IconButton } from './components/IconButton'
 import { Sidebar } from './components/Sidebar'
@@ -15,7 +16,6 @@ import { EditorDropZones, WorkspaceDndProvider } from './components/WorkspaceDnd
 
 const SIDEBAR_COLLAPSE_THRESHOLD = 120
 const RESIZE_TARGET_SIZE = { coarse: 48, fine: 32 }
-type ImportTarget = false | 'active' | 'primary' | 'secondary' | 'single'
 
 const captureResizePointer = (event: React.PointerEvent<HTMLDivElement>) => {
   try { event.currentTarget.setPointerCapture(event.pointerId) } catch { /* Browser keeps document-level dragging as a fallback. */ }
@@ -36,13 +36,10 @@ export default function App() {
   const { t, i18n } = useTranslation()
   const hydrate = useWorkspace((state) => state.hydrate)
   const hydrated = useWorkspace((state) => state.hydrated)
-  const nodes = useWorkspace((state) => state.nodes)
   const layout = useWorkspace((state) => state.layout)
   const settings = useWorkspace((state) => state.settings)
   const notice = useWorkspace((state) => state.notice)
   const addFile = useWorkspace((state) => state.addFile)
-  const addDirectory = useWorkspace((state) => state.addDirectory)
-  const replaceImportedFile = useWorkspace((state) => state.replaceImportedFile)
   const setSidebarOpen = useWorkspace((state) => state.setSidebarOpen)
   const setSidebarCollapsed = useWorkspace((state) => state.setSidebarCollapsed)
   const setActiveMobileGroup = useWorkspace((state) => state.setActiveMobileGroup)
@@ -55,13 +52,11 @@ export default function App() {
   const restoredSidebarCollapse = useRef(false)
   const sidebarAnimationTimer = useRef<number | null>(null)
   const sidebarDragCleanup = useRef<(() => void) | null>(null)
-  const importedShareHash = useRef<string | null>(null)
   const hydrationStarted = useRef(false)
   const narrow = useNarrow()
   const [sidebarAnimating, setSidebarAnimating] = useState(false)
   const [dragTarget, setDragTarget] = useState<'tree' | 'editor' | null>(null)
-  const [applyConflictToAll, setApplyConflictToAll] = useState(false)
-  const [conflict, setConflict] = useState<null | { name: string; resolve: (result: { choice: 'overwrite' | 'copy' | 'skip'; applyAll: boolean }) => void }>(null)
+  const { conflict, applyConflictToAll, setApplyConflictToAll, finishConflict, importItems } = useImportWorkflow()
 
   useEffect(() => {
     if (hydrationStarted.current) return
@@ -79,13 +74,10 @@ export default function App() {
         }
         return
       }
-      if (importedShareHash.current === hash) return
-      importedShareHash.current = hash
       cleanFileShareUrl()
       void readFileShareHash(hash).then((shared) => {
         if (!shared) return
-        addFile(shared.name, shared.text, { source: 'drop', dataUrl: shared.dataUrl, mimeType: shared.mimeType, open: true, groupId: 'primary' })
-        setSidebarOpen(false)
+        return importItems([{ kind: 'decoded', ...shared, source: 'drop' }], 'primary')
       }).catch((error) => {
         if (!(error instanceof ShareLinkError)) { setNotice('sharedFileCorrupt'); return }
         const notices = {
@@ -100,8 +92,12 @@ export default function App() {
     }
     importSharedFile()
     window.addEventListener('hashchange', importSharedFile)
-    return () => window.removeEventListener('hashchange', importSharedFile)
-  }, [addFile, hydrated, setNotice, setSidebarOpen])
+    window.addEventListener('popstate', importSharedFile)
+    return () => {
+      window.removeEventListener('hashchange', importSharedFile)
+      window.removeEventListener('popstate', importSharedFile)
+    }
+  }, [hydrated, importItems, setNotice])
   useEffect(() => { void i18n.changeLanguage(settings.locale) }, [i18n, settings.locale])
   useEffect(() => {
     document.documentElement.dataset.theme = settings.theme
@@ -151,82 +147,17 @@ export default function App() {
     window.addEventListener('pointercancel', cleanup)
   }
 
-  const ensureFolders = useCallback((path: string[], root: string | null = null) => {
-    let parentId = root
-    for (const name of path) {
-      const state = useWorkspace.getState()
-      const existing = Object.values(state.nodes).find((node) => node.kind === 'directory' && node.parentId === parentId && node.name === name)
-      parentId = existing?.id ?? state.addDirectory(name, parentId)
-    }
-    return parentId
-  }, [])
-
-  const askConflict = useCallback((name: string) => new Promise<{ choice: 'overwrite' | 'copy' | 'skip'; applyAll: boolean }>((resolve) => {
-    setApplyConflictToAll(false)
-    setConflict({ name, resolve })
-  }), [])
-
-  const importEntries = useCallback(async (entries: Array<{ file: File; path?: string[]; handle?: FileSystemFileHandle }>, target: ImportTarget) => {
-    let first: string | null = null
-    let rejected = false
-    let batchChoice: 'overwrite' | 'copy' | 'skip' | null = null
-    for (const entry of entries) {
-      const image = isSupportedImage(entry.file)
-      if (!image && !isProbablyText(entry.file)) { rejected = true; continue }
-      try {
-        const parentId = ensureFolders(entry.path ?? [])
-        const text = image ? '' : await entry.file.text()
-        const media = image ? { dataUrl: await fileToDataUrl(entry.file), mimeType: entry.file.type } : undefined
-        const existing = Object.values(useWorkspace.getState().nodes).find((node) => node.kind === 'file' && node.parentId === parentId && node.name.toLowerCase() === entry.file.name.toLowerCase())
-        let fileId: string
-        if (existing) {
-          const decision: { choice: 'overwrite' | 'copy' | 'skip'; applyAll: boolean } = batchChoice
-            ? { choice: batchChoice, applyAll: true }
-            : await askConflict(entry.file.name)
-          if (decision.applyAll) batchChoice = decision.choice
-          if (decision.choice === 'skip') continue
-          if (decision.choice === 'overwrite') {
-            replaceImportedFile(existing.id, text, entry.handle, media)
-            fileId = existing.id
-          } else fileId = addFile(entry.file.name, text, { parentId, source: entry.handle ? 'picker' : 'drop', handle: entry.handle, open: false, ...media })
-        } else fileId = addFile(entry.file.name, text, { parentId, source: entry.handle ? 'picker' : 'drop', handle: entry.handle, open: false, ...media })
-        first ??= fileId
-      } catch { rejected = true }
-    }
-    if (target && first) {
-      const workspace = useWorkspace.getState()
-      if (target === 'single') {
-        workspace.closeSecondary()
-        useWorkspace.getState().openFile(first, 'primary')
-      } else if (target === 'primary') {
-        const groups = workspace.layout.groups
-        if (!groups[1].activeFileId && groups[0].activeFileId && groups[0].activeFileId !== first) {
-          workspace.openFile(groups[0].activeFileId, 'secondary')
-        }
-        useWorkspace.getState().openFile(first, 'primary')
-      } else {
-        workspace.openFile(first, target === 'secondary' ? 'secondary' : workspace.layout.activeMobileGroup)
-      }
-    }
-    if (rejected) setNotice('unsupported')
-  }, [addFile, askConflict, ensureFolders, replaceImportedFile, setNotice])
-
-  const finishConflict = (choice: 'overwrite' | 'copy' | 'skip') => {
-    conflict?.resolve({ choice, applyAll: applyConflictToAll })
-    setConflict(null)
-  }
-
   const createQuickDocument = () => addFile('untitled.txt', '')
 
   const fromInput = (files: FileList | null, target: ImportTarget = false) => {
     if (!files) return
-    void importEntries(Array.from(files).map((file) => ({ file, path: (file as File & { webkitRelativePath?: string }).webkitRelativePath?.split('/').slice(0, -1).filter(Boolean) })), target)
+    void importItems(Array.from(files).map((file): ImportItem => ({ kind: 'file', file, path: (file as File & { webkitRelativePath?: string }).webkitRelativePath?.split('/').slice(0, -1).filter(Boolean) })), target)
   }
   const pickFiles = async () => {
     if (window.showOpenFilePicker) {
       try {
         const handles = await window.showOpenFilePicker({ multiple: true })
-        await importEntries(await Promise.all(handles.map(async (handle) => ({ file: await handle.getFile(), handle }))), false)
+        await importItems(await Promise.all(handles.map(async (handle): Promise<ImportItem> => ({ kind: 'file', file: await handle.getFile(), handle }))), false)
       } catch (error) { if (!(error instanceof DOMException && error.name === 'AbortError')) setNotice('importFailed') }
     } else fileInput.current?.click()
   }
@@ -234,10 +165,11 @@ export default function App() {
     if (window.showDirectoryPicker) {
       try {
         const handle = await window.showDirectoryPicker()
-        const rootId = ensureFolders([handle.name])
         const entries = await collectDirectory(handle)
-        await importEntries(entries.map((entry) => ({ ...entry, path: [handle.name, ...entry.path] })), false)
-        void rootId
+        await importItems([
+          { kind: 'directory', path: [handle.name] },
+          ...entries.map((entry) => ({ kind: 'file' as const, ...entry, path: [handle.name, ...entry.path] }))
+        ], false)
       } catch (error) { if (!(error instanceof DOMException && error.name === 'AbortError')) setNotice('importFailed') }
     } else folderInput.current?.click()
   }
@@ -256,7 +188,7 @@ export default function App() {
     const entries = files.length && !containsDirectory
       ? Promise.resolve(files.map((file) => ({ file, path: [] })))
       : collectDroppedItems(items)
-    void entries.then((dropped) => importEntries(dropped, target)).catch(() => setNotice('importFailed'))
+    void entries.then((dropped) => importItems(dropped.map((entry) => ({ kind: 'file' as const, ...entry })), target)).catch(() => setNotice('importFailed'))
   }
 
   if (!hydrated) return <div className="loading"><div className="loading-mark">W</div></div>

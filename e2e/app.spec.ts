@@ -43,7 +43,7 @@ test('opens a file dropped on the editor', async ({ page }) => {
   await expect(page.locator('.cm-content')).toContainText('Dropped text')
 })
 
-test('creates a compressed share link that imports and opens the document', async ({ page }, testInfo) => {
+test('reimports the same share link through the normal conflict flow', async ({ page }, testInfo) => {
   await page.evaluate(() => {
     Object.defineProperty(navigator, 'share', {
       configurable: true,
@@ -65,11 +65,49 @@ test('creates a compressed share link that imports and opens the document', asyn
   expect(url).toContain('#share=g.')
   expect(url!.length).toBeLessThan(text.length / 2)
   await page.goto(url!)
-  await expect(page.locator('.document-title')).toContainText('shared-note')
-  await expect(page.locator('.cm-content')).toContainText('Shared URL content.')
+  await expect(page.getByRole('dialog')).toContainText('shared-note.txt')
+  await page.getByRole('button', { name: /Keep both|保留两份/ }).click()
+  await expect(page.getByTestId('editor-primary').locator('.document-title')).toContainText('shared-note 2.txt')
+  await expect(page.getByTestId('editor-primary').locator('.cm-content')).toContainText('Shared URL content.')
   if (testInfo.project.name === 'ipad') await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
   await expect(page.getByTestId('sidebar').locator('.tree-row')).toHaveCount(2)
   await expect.poll(() => page.url()).not.toContain('#share=')
+
+  await page.goto(url!)
+  await expect(page.getByRole('dialog')).toContainText('shared-note.txt')
+  await page.getByRole('button', { name: /Keep both|保留两份/ }).click()
+  await expect(page.getByTestId('editor-primary').locator('.document-title')).toContainText('shared-note 3.txt')
+  await expect(page.getByTestId('editor-primary').locator('.cm-content')).toContainText('Shared URL content.')
+  if (testInfo.project.name === 'ipad') await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
+  await expect(page.getByTestId('sidebar').locator('.tree-row')).toHaveCount(3)
+  await expect.poll(() => page.url()).not.toContain('#share=')
+})
+
+test('can overwrite an existing file when importing a share link', async ({ page }) => {
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'share', {
+      configurable: true,
+      value: async (data: ShareData) => { (window as Window & { __sharedFileUrl?: string }).__sharedFileUrl = String(data.url) }
+    })
+  })
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'replace-me.txt', mimeType: 'text/plain', buffer: Buffer.from('Original shared text') })
+  if ((page.viewportSize()?.width ?? 1000) < 900) await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
+  await page.getByTestId('sidebar').getByText('replace-me.txt', { exact: true }).click()
+  const shareLink = page.getByRole('button', { name: /Create share link|创建分享链接/ })
+  if (await shareLink.isVisible()) await shareLink.click()
+  else {
+    await page.getByRole('button', { name: /More actions|更多操作/ }).click()
+    await page.getByRole('menuitem', { name: /Create share link|创建分享链接/ }).click()
+  }
+  const url = await page.evaluate(() => (window as Window & { __sharedFileUrl?: string }).__sharedFileUrl)
+  await page.locator('.cm-content').fill('Locally changed text')
+  await page.goto(url!)
+  await expect(page.getByRole('dialog')).toContainText('replace-me.txt')
+  await page.getByRole('button', { name: /^(Replace|覆盖)$/ }).click()
+  await expect(page.locator('.cm-content')).toContainText('Original shared text')
+  await expect(page.locator('.cm-content')).not.toContainText('Locally changed text')
+  if ((page.viewportSize()?.width ?? 1000) < 900) await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
+  await expect(page.getByTestId('sidebar').locator('.tree-row')).toHaveCount(1)
 })
 
 test('explains missing and corrupt shared file data', async ({ page }) => {
