@@ -3,21 +3,29 @@ import type { FileNode } from '../types'
 
 export function isProbablyText(file: File) {
   if (file.type.startsWith('text/')) return true
-  const blocked = /\.(png|jpe?g|gif|webp|ico|pdf|zip|gz|7z|rar|woff2?|ttf|otf|mp[34]|mov|avi|wasm|exe|dmg)$/i
+  if (mediaKindForFile(file)) return false
+  const blocked = /\.(pdf|zip|gz|7z|rar|woff2?|ttf|otf|wasm|exe|dmg)$/i
   return !blocked.test(file.name)
 }
 
-export function isSupportedImage(file: File) {
-  return /^image\/(png|jpeg|gif|webp|avif)$/i.test(file.type) || /\.(png|jpe?g|gif|webp|avif)$/i.test(file.name)
+export type MediaKind = 'image' | 'video'
+
+export function mediaKindForFile(file: Pick<File, 'name' | 'type'>): MediaKind | null {
+  if (file.type.toLowerCase().startsWith('image/')) return 'image'
+  if (file.type.toLowerCase().startsWith('video/')) return 'video'
+  if (/\.(avif|bmp|gif|heic|heif|ico|jfif|jpe?g|png|svg|tif{1,2}|webp)$/i.test(file.name)) return 'image'
+  if (/\.(3g2|3gp|avi|flv|m4v|mkv|mov|mp4|mpeg|mpg|ogv|ts|webm|wmv)$/i.test(file.name)) return 'video'
+  return null
 }
 
-export function fileToDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result))
-    reader.onerror = () => reject(reader.error)
-    reader.readAsDataURL(file)
-  })
+export function mediaMimeType(file: Pick<File, 'name' | 'type'>, kind: MediaKind) {
+  if (file.type.toLowerCase().startsWith(`${kind}/`)) return file.type
+  const extension = file.name.split('.').at(-1)?.toLowerCase() ?? ''
+  const known: Record<string, string> = {
+    avif: 'image/avif', bmp: 'image/bmp', gif: 'image/gif', heic: 'image/heic', heif: 'image/heif', ico: 'image/x-icon', jfif: 'image/jpeg', jpe: 'image/jpeg', jpeg: 'image/jpeg', jpg: 'image/jpeg', png: 'image/png', svg: 'image/svg+xml', tif: 'image/tiff', tiff: 'image/tiff', webp: 'image/webp',
+    '3g2': 'video/3gpp2', '3gp': 'video/3gpp', avi: 'video/x-msvideo', flv: 'video/x-flv', m4v: 'video/x-m4v', mkv: 'video/x-matroska', mov: 'video/quicktime', mp4: 'video/mp4', mpeg: 'video/mpeg', mpg: 'video/mpeg', ogv: 'video/ogg', ts: 'video/mp2t', webm: 'video/webm', wmv: 'video/x-ms-wmv'
+  }
+  return known[extension] ?? `${kind}/unknown`
 }
 
 export function dataUrlToBytes(dataUrl: string) {
@@ -32,6 +40,12 @@ export function dataUrlToBytes(dataUrl: string) {
 export function dataUrlToBlob(dataUrl: string) {
   const { bytes, mimeType } = dataUrlToBytes(dataUrl)
   return new Blob([bytes], { type: mimeType })
+}
+
+export function contentMediaBlob(content: { mediaBlob?: Blob; dataUrl?: string; mimeType?: string }) {
+  if (content.mediaBlob) return content.mediaBlob
+  if (content.dataUrl) return dataUrlToBlob(content.dataUrl)
+  throw new Error('Media content has no binary data')
 }
 
 export function downloadBlob(blob: Blob, name: string) {
@@ -69,41 +83,51 @@ export function shareTextFile(text: string, name: string) {
   return shareBlob(new Blob([text], { type: 'text/plain' }), name)
 }
 
-function createWorkspaceZip(
+export async function createWorkspaceZip(
   nodes: Record<string, FileNode>,
-  contents: Record<string, { text: string; dataUrl?: string }>
+  contents: Record<string, { text: string; mediaBlob?: Blob; dataUrl?: string }>
 ) {
   const paths = new Map<string, string>()
   const pathFor = (node: FileNode): string => {
     const cached = paths.get(node.id)
     if (cached) return cached
     const parent = node.parentId ? nodes[node.parentId] : undefined
+    if (node.parentId && !parent) throw new Error(`Cannot export node ${node.id} with a missing parent`)
     const path = parent ? `${pathFor(parent)}/${node.name}` : node.name
     paths.set(node.id, path)
     return path
   }
   const entries: Record<string, Uint8Array> = {}
-  Object.values(nodes).filter((node) => node.kind === 'file').forEach((node) => {
+  const files = Object.values(nodes).filter((node) => node.kind === 'file')
+  const reservedPaths = new Set<string>()
+  const exports = files.map((node) => {
     const content = contents[node.id]
-    entries[pathFor(node)] = content?.dataUrl ? dataUrlToBytes(content.dataUrl).bytes : strToU8(content?.text ?? '')
+    if (!content) throw new Error(`Cannot export file ${node.id} without content`)
+    const path = pathFor(node)
+    if (reservedPaths.has(path)) throw new Error(`Cannot export duplicate path: ${path}`)
+    reservedPaths.add(path)
+    return { content, path }
   })
+  await Promise.all(exports.map(async ({ content, path }) => {
+    entries[path] = content.mediaBlob || content.dataUrl ? new Uint8Array(await contentMediaBlob(content).arrayBuffer()) : strToU8(content.text)
+  }))
   return new Blob([zipSync(entries, { level: 6 }) as BlobPart], { type: 'application/zip' })
 }
 
-export function workspaceZip(
+export async function workspaceZip(
   nodes: Record<string, FileNode>,
-  contents: Record<string, { text: string; dataUrl?: string }>,
+  contents: Record<string, { text: string; mediaBlob?: Blob; dataUrl?: string }>,
   workspaceName: string
 ) {
-  downloadBlob(createWorkspaceZip(nodes, contents), `${workspaceName}.zip`)
+  downloadBlob(await createWorkspaceZip(nodes, contents), `${workspaceName}.zip`)
 }
 
-export function shareWorkspace(
+export async function shareWorkspace(
   nodes: Record<string, FileNode>,
-  contents: Record<string, { text: string; dataUrl?: string }>,
+  contents: Record<string, { text: string; mediaBlob?: Blob; dataUrl?: string }>,
   workspaceName: string
 ) {
-  return shareBlob(createWorkspaceZip(nodes, contents), `${workspaceName}.zip`, workspaceName)
+  return shareBlob(await createWorkspaceZip(nodes, contents), `${workspaceName}.zip`, workspaceName)
 }
 
 export function canShareWorkspace(workspaceName: string) {

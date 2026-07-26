@@ -131,7 +131,7 @@ export function Sidebar({ onImportFiles, onImportFolder, onCollapse }: {
       <div ref={treeScroll} className="tree-scroll">
         <div className={`pull-search-indicator ${pullOffset >= PULL_SEARCH_THRESHOLD ? 'ready' : ''}`} style={{ opacity: Math.min(1, pullOffset / 48) }} aria-hidden="true"><Search size={22} /></div>
         <div className={`tree-pull-content ${pulling ? 'pulling' : ''}`} style={{ transform: pullOffset ? `translateY(${pullOffset}px)` : undefined }}>
-          {Object.keys(nodes).length ? <FileTree /> : <div className="tree-empty">{t('touchHint')}</div>}
+          {Object.keys(nodes).length ? <FileTree /> : <div className="tree-empty">{t('emptyFileList')}</div>}
         </div>
       </div>
       <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />

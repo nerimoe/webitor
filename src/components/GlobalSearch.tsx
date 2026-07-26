@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import Fuse from 'fuse.js'
-import { FileImage, FileText, Search, X } from 'lucide-react'
+import { FileImage, FileText, FileVideo, Search, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useWorkspace } from '../store/useWorkspace'
 import type { FileNode } from '../types'
@@ -14,7 +14,7 @@ interface SearchRecord {
   text: string
   line: number
   from: number
-  image: boolean
+  mediaKind: 'binary' | 'image' | 'video' | null
 }
 
 function nodePath(node: FileNode, nodes: Record<string, FileNode>) {
@@ -42,15 +42,16 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean; onOpenChan
     const output: SearchRecord[] = []
     Object.values(nodes).filter((node) => node.kind === 'file').forEach((node) => {
       const content = contents[node.id]
+      if (!content) throw new Error(`Search index cannot find content for ${node.id}`)
       const path = nodePath(node, nodes)
-      if (content?.contentKind === 'image') {
-        output.push({ id: `${node.id}:image`, fileId: node.id, name: node.name, path, text: '', line: 0, from: 0, image: true })
+      if (content.contentKind !== 'text') {
+        output.push({ id: `${node.id}:media`, fileId: node.id, name: node.name, path, text: '', line: 0, from: 0, mediaKind: content.contentKind ?? 'binary' })
         return
       }
       let offset = 0
-      const lines = (content?.text ?? '').split('\n')
+      const lines = content.text.split('\n')
       lines.forEach((text, index) => {
-        if (text.trim() || index === 0) output.push({ id: `${node.id}:${index}`, fileId: node.id, name: node.name, path, text, line: index + 1, from: offset, image: false })
+        if (text.trim() || index === 0) output.push({ id: `${node.id}:${index}`, fileId: node.id, name: node.name, path, text, line: index + 1, from: offset, mediaKind: null })
         offset += text.length + 1
       })
     })
@@ -72,7 +73,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean; onOpenChan
 
   const choose = (record: SearchRecord) => {
     openFile(record.fileId, 'primary')
-    if (!record.image) {
+    if (!record.mediaKind) {
       const direct = record.text.toLowerCase().indexOf(query.toLowerCase())
       const from = record.from + Math.max(0, direct)
       setPendingReveal({ fileId: record.fileId, from, to: from + Math.max(1, direct >= 0 ? query.length : record.text.length) })
@@ -93,7 +94,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean; onOpenChan
         }} /><button aria-label={t('clearSearch')} disabled={!query} onClick={() => { setQuery(''); setSelected(0); inputRef.current?.focus() }}><X size={20} /></button></div>
         <div className="global-search-results">
           {results.length ? results.map((record, index) => <button key={record.id} className={index === selected ? 'selected' : ''} onPointerMove={() => setSelected(index)} onClick={() => choose(record)}>
-            {record.image ? <FileImage size={20} /> : <FileText size={20} />}
+            {record.mediaKind === 'image' ? <FileImage size={20} /> : record.mediaKind === 'video' ? <FileVideo size={20} /> : <FileText size={20} />}
             <span className="search-result-copy"><strong>{record.name}{record.line ? `:${record.line}` : ''}</strong><small>{record.text || record.path}</small></span>
             <span className="search-result-path">{record.path}</span>
           </button>) : <div className="search-empty">{t('noResults')}</div>}

@@ -47,6 +47,7 @@
     "fuse.js": "^7.5.0",
     "i18next": "latest",
     "idb": "latest",
+    "libheif-js": "^1.19.8",
     "lucide-react": "latest",
     "react": "latest",
     "react-dom": "latest",

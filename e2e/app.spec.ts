@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { readFile } from 'node:fs/promises'
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
@@ -16,6 +17,41 @@ test('creates and restores a local file', async ({ page }) => {
   await page.reload()
   await expect(page.locator('.document-title')).toContainText(/notes.md|untitled.txt/)
   await expect(page.locator('.cm-content')).toContainText('Offline note')
+})
+
+test('retries workspace restoration without reloading the page', async ({ page }) => {
+  await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('local-ide')
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    await new Promise<void>((resolve, reject) => {
+      const request = db.transaction('state', 'readwrite').objectStore('state').put({ schemaVersion: 5, broken: true }, 'current')
+      request.onsuccess = () => resolve()
+      request.onerror = () => reject(request.error)
+    })
+    db.close()
+  })
+  await page.reload()
+  await expect(page.getByRole('alert')).toContainText(/could not be restored|无法恢复上次的工作区/)
+
+  await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('local-ide')
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    await new Promise<void>((resolve, reject) => {
+      const request = db.transaction('state', 'readwrite').objectStore('state').delete('current')
+      request.onsuccess = () => resolve()
+      request.onerror = () => reject(request.error)
+    })
+    db.close()
+  })
+  await page.getByRole('button', { name: /Retry|重试/ }).click()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await expect(page.getByTestId('no-file-state')).toBeVisible()
 })
 
 test('shows file type, line count, and character count in the document footer', async ({ page }) => {
@@ -155,7 +191,7 @@ test('can overwrite an existing file when importing a share link', async ({ page
 
 test('explains missing and corrupt shared file data', async ({ page }) => {
   await page.goto('/?share=AAAAAAAAAAAAAAAA')
-  await expect(page.getByRole('alert')).toContainText(/missing|缺少/i)
+  await expect(page.getByRole('alert')).toContainText(/missing|incomplete|缺少|不完整/i)
   await expect.poll(() => page.url()).not.toContain('?share=')
   await page.goto('/?share=AAAAAAAAAAAAAAAA#key=invalid')
   await expect(page.getByRole('alert')).toContainText(/invalid|无效|损坏/i)
@@ -324,16 +360,19 @@ test('starts resizing from the expanded separator hit target', async ({ page }, 
   await expect.poll(async () => (await sidebar.boundingBox())!.width).toBeGreaterThan(before!.width + 50)
 })
 
-test('shows Markdown preview without a duplicate editor toolbar', async ({ page }, testInfo) => {
+test('switches a Markdown file between its text and preview providers', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name === 'ipad')
   await page.locator('input[type=file]').first().setInputFiles({ name: 'README.md', mimeType: 'text/markdown', buffer: Buffer.from('# Preview') })
   await page.getByTestId('sidebar').getByText('README.md', { exact: true }).click()
-  await page.getByRole('button', { name: /Markdown preview|Markdown 预览/ }).click()
+  await page.getByRole('tab', { name: /Markdown preview|Markdown 预览/ }).click()
   await expect(page.getByTestId('markdown-preview')).toBeVisible()
   await expect(page.locator('.document-bar')).toHaveCount(1)
+  await page.getByRole('tab', { name: /Text editor|文本编辑/ }).click()
+  await expect(page.getByTestId('markdown-preview')).toHaveCount(0)
+  await expect(page.locator('.cm-content')).toBeVisible()
 })
 
-test('closes Markdown preview when switching documents', async ({ page }, testInfo) => {
+test('keeps split document providers independent when the other pane switches files', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name === 'ipad')
   await page.locator('input[type=file]').first().setInputFiles([
     { name: 'note.md', mimeType: 'text/markdown', buffer: Buffer.from('# Note') },
@@ -341,11 +380,22 @@ test('closes Markdown preview when switching documents', async ({ page }, testIn
   ])
   const sidebar = page.getByTestId('sidebar')
   await sidebar.getByText('note.md', { exact: true }).click()
-  await page.getByRole('button', { name: /Markdown preview|Markdown 预览/ }).click()
-  await expect(page.getByTestId('markdown-preview')).toBeVisible()
+  await page.getByRole('button', { name: /Show side by side|并排显示/ }).click()
+  await expect(page.getByTestId('editor-secondary').getByTestId('markdown-preview')).toBeVisible()
+  await expect(page.getByTestId('shared-document-bar')).toHaveCount(1)
+  await expect(page.locator('.pane-view-bar')).toHaveCount(2)
+  await expect(page.getByTestId('shared-document-status')).toHaveCount(1)
+  await expect(page.locator('.document-title')).toHaveCount(1)
+  await expect(page.getByRole('button', { name: /Download|下载/ })).toHaveCount(1)
   await sidebar.getByText('plain.txt', { exact: true }).click()
+  await expect(page.getByTestId('shared-document-bar')).toHaveCount(0)
+  await expect(page.locator('.pane-view-bar')).toHaveCount(0)
+  await expect(page.locator('.document-bar')).toHaveCount(2)
+  await expect(page.getByTestId('editor-primary').locator('.document-title')).toContainText('plain.txt')
+  await expect(page.getByTestId('editor-secondary').getByTestId('markdown-preview')).toBeVisible()
+  await page.getByTestId('editor-secondary').getByRole('button', { name: /Close pane|关闭分栏/ }).click()
+  await expect(page.locator('.document-bar')).toHaveCount(1)
   await expect(page.getByTestId('markdown-preview')).toHaveCount(0)
-  await expect(page.locator('.document-title')).toContainText('plain.txt')
 })
 
 test('moves a listed file into an existing folder', async ({ page }, testInfo) => {
@@ -530,6 +580,26 @@ test('imports and previews an image document', async ({ page }, testInfo) => {
     expect(Math.abs(afterAnchor.x - beforeAnchor.x)).toBeLessThan(.015)
     expect(Math.abs(afterAnchor.y - beforeAnchor.y)).toBeLessThan(.015)
   }
+})
+
+test('decodes HEIC when native preview is unavailable and keeps video out of the text editor', async ({ page }) => {
+  const heic = await readFile(new URL('./fixtures/sample.heic', import.meta.url))
+  await page.locator('input[type=file]').first().setInputFiles([
+    { name: 'photo.heic', mimeType: 'image/heic', buffer: heic },
+    { name: 'clip.mov', mimeType: 'video/quicktime', buffer: Buffer.from([0, 0, 0, 20]) }
+  ])
+  if ((page.viewportSize()?.width ?? 1000) < 900) await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
+  const sidebar = page.getByTestId('sidebar')
+  await sidebar.getByText('photo.heic', { exact: true }).click()
+  await expect(page.locator('.image-preview')).toBeVisible()
+  await expect(page.locator('.image-preview img')).toHaveJSProperty('complete', true)
+  await expect.poll(() => page.locator('.image-preview img').evaluate((image: HTMLImageElement) => image.naturalWidth), { timeout: 15_000 }).toBeGreaterThan(0)
+  await expect(page.locator('.cm-content')).toHaveCount(0)
+
+  if ((page.viewportSize()?.width ?? 1000) < 900) await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
+  await sidebar.getByText('clip.mov', { exact: true }).click()
+  await expect(page.locator('.video-preview, .media-preview-unavailable')).toBeVisible()
+  await expect(page.locator('.cm-content')).toHaveCount(0)
 })
 
 test('zooms an image around the midpoint of two touches', async ({ page }, testInfo) => {

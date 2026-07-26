@@ -1,0 +1,39 @@
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
+import { Check, ChevronDown, Columns2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import type { DocumentViewProvider } from '../documentFormats/types'
+import { IconButton } from './IconButton'
+
+export function DocumentViewSwitcher({ views, activeViewId, splitCandidates, onSelect, onSplit }: {
+  views: DocumentViewProvider[]
+  activeViewId: string
+  splitCandidates: DocumentViewProvider[]
+  onSelect: (viewId: string) => void
+  onSplit: (viewId: string) => void
+}) {
+  const { t } = useTranslation()
+  if (views.length < 2) return null
+  const activeView = views.find((view) => view.id === activeViewId)
+  if (!activeView) throw new Error(`Active document view is unavailable: ${activeViewId}`)
+
+  const providerItems = views.map((view) => <DropdownMenu.Item key={view.id} className="menu-item view-provider-item" onSelect={() => onSelect(view.id)}>
+    <span>{t(view.labelKey)}</span>{view.id === activeViewId && <Check size={17} />}
+  </DropdownMenu.Item>)
+
+  return <div className="document-view-controls">
+    <div className="view-mode-tabs" role="tablist" aria-label={t('documentViews')}>
+      {views.map((view) => <button key={view.id} role="tab" aria-selected={view.id === activeViewId} className={view.id === activeViewId ? 'active' : ''} onClick={() => onSelect(view.id)}>{t(view.labelKey)}</button>)}
+    </div>
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild><button className="view-mode-select" aria-label={t('documentViews')}><span>{t(activeView.labelKey)}</span><ChevronDown size={16} /></button></DropdownMenu.Trigger>
+      <DropdownMenu.Portal><DropdownMenu.Content className="menu-content view-provider-menu" align="start">{providerItems}</DropdownMenu.Content></DropdownMenu.Portal>
+    </DropdownMenu.Root>
+    {splitCandidates.length === 1 && <IconButton icon={Columns2} label={t('showSideBySide')} className="view-split-button" onClick={() => onSplit(splitCandidates[0].id)} />}
+    {splitCandidates.length > 1 && <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild><IconButton icon={Columns2} label={t('showSideBySide')} className="view-split-button" /></DropdownMenu.Trigger>
+      <DropdownMenu.Portal><DropdownMenu.Content className="menu-content view-provider-menu" align="end">
+        {splitCandidates.map((view) => <DropdownMenu.Item key={view.id} className="menu-item" onSelect={() => onSplit(view.id)}>{t(view.labelKey)}</DropdownMenu.Item>)}
+      </DropdownMenu.Content></DropdownMenu.Portal>
+    </DropdownMenu.Root>}
+  </div>
+}

@@ -10,6 +10,8 @@ import { useWorkspace } from './store/useWorkspace'
 import type { EditorGroup } from './types'
 import { useImportWorkflow, type ImportItem, type ImportTarget } from './hooks/useImportWorkflow'
 import { EditorPane } from './components/EditorPane'
+import { DocumentHeader } from './components/DocumentHeader'
+import { DocumentStatusBar } from './components/DocumentStatusBar'
 import { IconButton } from './components/IconButton'
 import { Sidebar } from './components/Sidebar'
 import { EditorDropZones, WorkspaceDndProvider } from './components/WorkspaceDnd'
@@ -37,6 +39,7 @@ export default function App() {
   const { t, i18n } = useTranslation()
   const hydrate = useWorkspace((state) => state.hydrate)
   const hydrated = useWorkspace((state) => state.hydrated)
+  const canRetryHydration = useWorkspace((state) => state.persistenceBlocked && Object.keys(state.nodes).length === 0)
   const layout = useWorkspace((state) => state.layout)
   const settings = useWorkspace((state) => state.settings)
   const notice = useWorkspace((state) => state.notice)
@@ -83,7 +86,7 @@ export default function App() {
           invalid: 'sharedFileCorrupt',
           tooLarge: 'sharedFileTooLarge',
           unsupportedCompression: 'sharedFileCompressionUnsupported',
-          unsupportedImage: 'sharedFileUnsupportedImage',
+          unsupportedMedia: 'sharedFileUnsupportedMedia',
           unsupportedVersion: 'sharedFileUnsupportedVersion',
           notFound: 'sharedFileNotFound',
           expired: 'sharedFileExpired',
@@ -234,7 +237,11 @@ export default function App() {
         </>}
       </main>
       {shareImportProgress && <TransferStatus className="global-transfer-status" label={t(`sharePhase_${shareImportProgress.phase}`)} progress={shareImportProgress.progress} />}
-      {notice && <div className={`toast ${notice === 'copied' || notice === 'shareLinkCopied' ? 'success' : ''}`} role="alert"><span>{t(notice)}</span><button onClick={() => setNotice(null)}><X size={17} /><span className="sr-only">{t('dismiss')}</span></button></div>}
+      {notice && <div className={`toast ${notice === 'copied' || notice === 'shareLinkCopied' ? 'success' : ''}`} role="alert">
+        <span>{t(notice)}</span>
+        {canRetryHydration && <button className="toast-retry" onClick={() => void hydrate()}>{t('retry')}</button>}
+        <button className="toast-dismiss" onClick={() => setNotice(null)}><X size={17} /><span className="sr-only">{t('dismiss')}</span></button>
+      </div>}
       <Dialog.Root open={Boolean(conflict)} onOpenChange={(open) => { if (!open && conflict) finishConflict('skip') }}>
         <Dialog.Portal>
           <Dialog.Overlay className="dialog-overlay" />
@@ -266,13 +273,19 @@ function EditorArea({ groups, hasSecondary, splitRatio, setSplitRatio, onDrop, d
 }) {
   const { t } = useTranslation()
   const hasDocument = Boolean(groups[0].activeFileId || groups[1].activeFileId)
+  const sharedFileId = hasSecondary && groups[0].activeFileId === groups[1].activeFileId ? groups[0].activeFileId : null
   const dropTo = (event: React.DragEvent, target: ImportTarget) => onDrop(event, target)
-  return <div className={`editor-area ${dragActive ? 'drag-active' : ''}`} onDragEnter={(event) => { if (event.dataTransfer.types.includes('Files')) setDragTarget('editor') }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragTarget(null) }} onDrop={(event) => dropTo(event, hasDocument ? 'single' : 'active')}>
-    {hasSecondary ? <Group orientation="horizontal" id="editor-layout" resizeTargetMinimumSize={RESIZE_TARGET_SIZE} onLayoutChanged={(value, meta) => { if (meta.isUserInteraction) setSplitRatio(value.primary ?? splitRatio) }}>
-      <Panel id="primary" defaultSize={splitRatio} minSize="25%"><EditorPane group={groups[0]} leading={leading} onNewDocument={onNewDocument} onImportFiles={onImportFiles} /></Panel>
+  const editorContent = hasSecondary ? <Group orientation="horizontal" id="editor-layout" resizeTargetMinimumSize={RESIZE_TARGET_SIZE} onLayoutChanged={(value, meta) => { if (meta.isUserInteraction) setSplitRatio(value.primary ?? splitRatio) }}>
+      <Panel id="primary" defaultSize={splitRatio} minSize="25%"><EditorPane group={groups[0]} leading={sharedFileId ? undefined : leading} onNewDocument={onNewDocument} onImportFiles={onImportFiles} viewOnlyHeader={Boolean(sharedFileId)} /></Panel>
       <Separator className="resize-handle editor-resize" onPointerDown={captureResizePointer} />
-      <Panel id="secondary" defaultSize={100 - splitRatio} minSize="25%"><EditorPane group={groups[1]} onNewDocument={onNewDocument} onImportFiles={onImportFiles} /></Panel>
-    </Group> : <EditorPane group={groups[0]} leading={leading} onNewDocument={onNewDocument} onImportFiles={onImportFiles} />}
+      <Panel id="secondary" defaultSize={100 - splitRatio} minSize="25%"><EditorPane group={groups[1]} onNewDocument={onNewDocument} onImportFiles={onImportFiles} viewOnlyHeader={Boolean(sharedFileId)} /></Panel>
+    </Group> : <EditorPane group={groups[0]} leading={leading} onNewDocument={onNewDocument} onImportFiles={onImportFiles} />
+  return <div className={`editor-area ${sharedFileId ? 'shared-document-layout' : ''} ${dragActive ? 'drag-active' : ''}`} onDragEnter={(event) => { if (event.dataTransfer.types.includes('Files')) setDragTarget('editor') }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragTarget(null) }} onDrop={(event) => dropTo(event, hasDocument ? 'single' : 'active')}>
+    {sharedFileId ? <>
+      <DocumentHeader fileId={sharedFileId} leading={leading} shared />
+      <div className="shared-editor-body">{editorContent}</div>
+      <DocumentStatusBar fileId={sharedFileId} shared />
+    </> : editorContent}
     {dragActive && (hasDocument ? <div className="external-editor-drop-zones">
       <div className="external-drop-left" onDragEnter={(event) => event.currentTarget.classList.add('active')} onDragLeave={(event) => event.currentTarget.classList.remove('active')} onDragOver={(event) => event.preventDefault()} onDrop={(event) => dropTo(event, 'primary')}>{t('openLeft')}</div>
       <div className="external-drop-right" onDragEnter={(event) => event.currentTarget.classList.add('active')} onDragLeave={(event) => event.currentTarget.classList.remove('active')} onDragOver={(event) => event.preventDefault()} onDrop={(event) => dropTo(event, 'secondary')}>{t('openRightDrop')}</div>

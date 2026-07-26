@@ -1,16 +1,40 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { initialPersistedState, useWorkspace } from './useWorkspace'
 
 describe('workspace store', () => {
   beforeEach(() => {
-    useWorkspace.setState({ ...initialPersistedState(), hydrated: true, notice: null, selectedNodeId: null })
+    useWorkspace.setState({ ...initialPersistedState(), hydrated: true, persistenceBlocked: false, notice: null, selectedNodeId: null })
   })
+
+  afterEach(() => vi.useRealTimers())
 
   it('keeps imported sibling names unique', () => {
     const first = useWorkspace.getState().addFile('index.ts', 'one', { open: false })
     const second = useWorkspace.getState().addFile('index.ts', 'two', { open: false })
     expect(useWorkspace.getState().nodes[first].name).toBe('index.ts')
     expect(useWorkspace.getState().nodes[second].name).toBe('index 2.ts')
+  })
+
+  it('keeps sibling names unique through rename and move', () => {
+    const folder = useWorkspace.getState().addDirectory('Notes')
+    const existing = useWorkspace.getState().addFile('draft.txt', 'one', { parentId: folder, open: false })
+    const moving = useWorkspace.getState().addFile('draft.txt', 'two', { open: false })
+    useWorkspace.getState().moveNode(moving, folder)
+    expect(useWorkspace.getState().nodes[moving].name).toBe('draft 2.txt')
+
+    useWorkspace.getState().renameNode(existing, 'draft 2.txt')
+    expect(useWorkspace.getState().nodes[existing].name).not.toBe(useWorkspace.getState().nodes[moving].name)
+  })
+
+  it('cancels pending autosave when a file is deleted', async () => {
+    const file = useWorkspace.getState().addFile('temporary.txt', 'before')
+    await useWorkspace.getState().persist()
+    vi.useFakeTimers()
+    useWorkspace.getState().updateContent(file, 'after')
+    useWorkspace.getState().deleteNode(file)
+    await vi.advanceTimersByTimeAsync(1_100)
+    expect(useWorkspace.getState().nodes[file]).toBeUndefined()
+    expect(useWorkspace.getState().contents[file]).toBeUndefined()
   })
 
   it('deletes a directory, descendants, content, and open tabs together', () => {
@@ -22,12 +46,13 @@ describe('workspace store', () => {
     expect(state.nodes[file]).toBeUndefined()
     expect(state.contents[file]).toBeUndefined()
     expect(state.layout.groups[0].tabs).not.toContain(file)
+    expect(state.expanded).not.toContain(folder)
   })
 
   it('uses the secondary group for Markdown preview without closing its tabs', () => {
     const previous = useWorkspace.getState().addFile('old.txt', 'old', { groupId: 'secondary' })
     const markdown = useWorkspace.getState().addFile('README.md', '# Hello')
-    useWorkspace.getState().previewMarkdown(markdown)
+    useWorkspace.getState().openFileView(markdown, 'secondary', 'markdown-preview')
     const secondary = useWorkspace.getState().layout.groups[1]
     expect(secondary.view).toBe('markdown-preview')
     expect(secondary.activeFileId).toBe(markdown)
@@ -44,13 +69,13 @@ describe('workspace store', () => {
     expect(useWorkspace.getState().nodes[parent].parentId).toBeNull()
   })
 
-  it('toggles the Markdown preview closed without changing its saved tabs', () => {
+  it('switches one pane between matching Markdown views', () => {
     const markdown = useWorkspace.getState().addFile('note.md', '# Note')
-    useWorkspace.getState().previewMarkdown(markdown)
-    useWorkspace.getState().previewMarkdown(markdown)
-    const secondary = useWorkspace.getState().layout.groups[1]
-    expect(secondary.view).toBe('editor')
-    expect(secondary.activeFileId).toBeNull()
+    useWorkspace.getState().setGroupView('primary', 'markdown-preview')
+    expect(useWorkspace.getState().layout.groups[0].view).toBe('markdown-preview')
+    useWorkspace.getState().setGroupView('primary', 'text-editor')
+    expect(useWorkspace.getState().layout.groups[0].view).toBe('text-editor')
+    expect(useWorkspace.getState().layout.groups[0].activeFileId).toBe(markdown)
   })
 
   it('closes either split group and promotes the remaining document', () => {

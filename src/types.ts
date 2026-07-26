@@ -24,7 +24,9 @@ export interface FileNode {
 export interface FileContent {
   fileId: string
   text: string
-  contentKind?: 'text' | 'image'
+  contentKind?: 'text' | 'binary' | 'image' | 'video'
+  mediaBlob?: Blob
+  // Version 1 stored media as base64. Version 2 migrates it to a Blob on load.
   dataUrl?: string
   mimeType?: string
   version: number
@@ -46,7 +48,7 @@ export interface EditorGroup {
   id: 'primary' | 'secondary'
   tabs: string[]
   activeFileId: string | null
-  view: 'editor' | 'markdown-preview'
+  view: string
 }
 
 export interface PersistedLayout {
@@ -65,6 +67,7 @@ export interface PersistedSettings {
 }
 
 export interface PersistedState {
+  schemaVersion: 5
   workspace: Workspace
   nodes: Record<string, FileNode>
   contents: Record<string, FileContent>

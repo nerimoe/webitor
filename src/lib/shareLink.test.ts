@@ -45,13 +45,31 @@ describe('encrypted file share links', () => {
     const url = await createFileShareUrl({ name: 'pixel.png', text: '', dataUrl, mimeType: 'image/png' }, 'https://webitor.example/')
 
     expect(url.length).toBeLessThan(150)
-    await expect(readFileShareUrl(url)).resolves.toEqual({ name: 'pixel.png', text: '', dataUrl, mimeType: 'image/png' })
+    const shared = await readFileShareUrl(url)
+    expect({ ...shared, mediaBlob: undefined }).toEqual({ name: 'pixel.png', text: '', mediaBlob: undefined, mimeType: 'image/png', contentKind: 'image' })
+    expect(new Uint8Array(await shared.mediaBlob!.arrayBuffer())).toEqual(new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]))
+  })
+
+  it('keeps video bytes and media kind encrypted', async () => {
+    const mediaBytes = new Uint8Array([0, 0, 0, 24, 102, 116, 121, 112])
+    const url = await createFileShareUrl({ name: 'clip.mp4', text: '', mediaBlob: new Blob([mediaBytes as BlobPart], { type: 'video/mp4' }), mimeType: 'video/mp4', contentKind: 'video' }, 'https://webitor.example/')
+    const shared = await readFileShareUrl(url)
+    expect({ ...shared, mediaBlob: undefined }).toEqual({ name: 'clip.mp4', text: '', mediaBlob: undefined, mimeType: 'video/mp4', contentKind: 'video' })
+    expect(new Uint8Array(await shared.mediaBlob!.arrayBuffer())).toEqual(mediaBytes)
+  })
+
+  it('round-trips custom binary formats without treating them as text', async () => {
+    const bytes = new Uint8Array([0, 255, 65, 66, 67, 0])
+    const url = await createFileShareUrl({ name: 'form.abcd', text: '', mediaBlob: new Blob([bytes], { type: 'application/x-abcd' }), mimeType: 'application/x-abcd', contentKind: 'binary' }, 'https://webitor.example/')
+    const shared = await readFileShareUrl(url)
+    expect({ ...shared, mediaBlob: undefined }).toEqual({ name: 'form.abcd', text: '', mediaBlob: undefined, mimeType: 'application/x-abcd', contentKind: 'binary' })
+    expect(new Uint8Array(await shared.mediaBlob!.arrayBuffer())).toEqual(bytes)
   })
 
   it('rejects a key that cannot authenticate the ciphertext', async () => {
     const url = new URL(await createFileShareUrl({ name: 'secret.txt', text: 'secret' }, 'https://webitor.example/'))
     const key = url.hash.slice('#key='.length)
-    url.hash = `key=${key.slice(0, -1)}${key.endsWith('A') ? 'B' : 'A'}`
+    url.hash = `key=${key.startsWith('A') ? 'B' : 'A'}${key.slice(1)}`
 
     await expect(readFileShareUrl(url.toString())).rejects.toMatchObject({ code: 'invalid' } satisfies Partial<ShareLinkError>)
   })

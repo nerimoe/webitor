@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { IconButton } from './IconButton'
 import { useLocalZoom, type ZoomAnchor } from './useLocalZoom'
 
-export function ImagePreview({ src, name }: { src: string; name: string }) {
+export function ImagePreview({ src, name, onError }: { src: string; name: string; onError?: () => void }) {
   const { t } = useTranslation()
   const [zoom, setZoom] = useState(100)
   const imageRef = useRef<HTMLImageElement>(null)
@@ -95,7 +95,7 @@ export function ImagePreview({ src, name }: { src: string; name: string }) {
     </div>
     <div ref={stageRef} className="image-stage">
       <div className="image-canvas" style={{ width: `${Math.max(100, zoom)}%` }}>
-        <img ref={imageRef} src={src} alt={name} style={{ width: `${Math.min(100, zoom)}%` }} onLoad={centerImage} />
+        <img ref={imageRef} src={src} alt={name} style={{ width: `${Math.min(100, zoom)}%` }} onLoad={centerImage} onError={onError} />
       </div>
     </div>
   </div>

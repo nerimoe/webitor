@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { shareTextFile } from './files'
+import { createWorkspaceZip, shareTextFile } from './files'
 
 describe('system sharing', () => {
   const originalShare = navigator.share
@@ -26,5 +26,10 @@ describe('system sharing', () => {
     Object.defineProperty(navigator, 'share', { configurable: true, value: undefined })
     expect(await shareTextFile('Hello', 'note.txt')).toBe(false)
     expect(click).not.toHaveBeenCalled()
+  })
+
+  it('fails export when the workspace violates the file-content invariant', async () => {
+    const node = { id: 'missing', parentId: null, name: 'missing.txt', kind: 'file' as const, order: 0, source: 'new' as const }
+    await expect(createWorkspaceZip({ missing: node }, {})).rejects.toThrow('without content')
   })
 })

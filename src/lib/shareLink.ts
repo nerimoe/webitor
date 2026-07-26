@@ -1,4 +1,5 @@
 import { dataUrlToBytes } from './files'
+import type { FileContent } from '../types'
 
 const SHARE_PARAM = 'share'
 const KEY_PARAM = 'key'
@@ -14,15 +15,18 @@ const MAX_ENCRYPTED_BYTES = 2 * 1024 * 1024
 interface ShareFileInput {
   name: string
   text: string
+  mediaBlob?: Blob
   dataUrl?: string
   mimeType?: string
+  contentKind?: FileContent['contentKind']
 }
 
 export interface SharedFile {
   name: string
   text: string
-  dataUrl?: string
+  mediaBlob?: Blob
   mimeType?: string
+  contentKind?: FileContent['contentKind']
 }
 
 export type ShareLinkProgress = {
@@ -37,7 +41,7 @@ export type ShareLinkErrorCode =
   | 'invalid'
   | 'tooLarge'
   | 'unsupportedCompression'
-  | 'unsupportedImage'
+  | 'unsupportedMedia'
   | 'unsupportedVersion'
   | 'notFound'
   | 'expired'
@@ -119,23 +123,30 @@ function safeName(name: string) {
   return value || fail('invalid', 'The shared file has no valid name')
 }
 
-function supportedImageMime(value: string) {
-  if (!/^image\/(png|jpeg|gif|webp|avif)$/i.test(value)) return fail('unsupportedImage', 'The shared image type is not supported')
-  return value
+function supportedBinaryMime(value: string) {
+  const match = /^([a-z0-9!#$&^_.+-]+)\/[a-z0-9!#$&^_.+-]+$/i.exec(value)
+  if (!match) return fail('unsupportedMedia', 'The shared file type is not supported')
+  const topLevel = match[1].toLowerCase()
+  const contentKind = topLevel === 'image' || topLevel === 'video' ? topLevel : 'binary'
+  return { mimeType: value, contentKind: contentKind as 'binary' | 'image' | 'video' }
 }
 
-function encodeFilePayload(input: ShareFileInput) {
+async function encodeFilePayload(input: ShareFileInput) {
   const name = new TextEncoder().encode(safeName(input.name))
-  const image = input.dataUrl ? dataUrlToBytes(input.dataUrl) : null
-  const mimeType = image ? supportedImageMime(input.mimeType || image.mimeType) : ''
+  const encodedMedia = input.mediaBlob
+    ? { bytes: new Uint8Array(await input.mediaBlob.arrayBuffer()), mimeType: input.mimeType || input.mediaBlob.type }
+    : input.dataUrl ? dataUrlToBytes(input.dataUrl) : null
+  const media = encodedMedia ? supportedBinaryMime(input.mimeType || encodedMedia.mimeType) : null
+  if (media && input.contentKind && input.contentKind !== media.contentKind) return fail('unsupportedMedia', 'The shared media type does not match its content')
+  const mimeType = media?.mimeType ?? ''
   const mime = new TextEncoder().encode(mimeType)
-  const body = image?.bytes ?? new TextEncoder().encode(input.text)
+  const body = encodedMedia?.bytes ?? new TextEncoder().encode(input.text)
   if (body.byteLength > MAX_FILE_BYTES || name.byteLength > 0xffff || mime.byteLength > 0xffff) {
     return fail('tooLarge', 'The file is too large to share')
   }
   const output = new Uint8Array(6 + name.byteLength + mime.byteLength + body.byteLength)
   output[0] = FILE_PAYLOAD_VERSION
-  output[1] = image ? 1 : 0
+  output[1] = encodedMedia ? 1 : 0
   const view = new DataView(output.buffer)
   view.setUint16(2, name.byteLength)
   view.setUint16(4, mime.byteLength)
@@ -158,12 +169,12 @@ function decodeFilePayload(bytes: Uint8Array): SharedFile {
   const name = safeName(decoder.decode(bytes.subarray(6, 6 + nameLength)))
   const body = bytes.subarray(bodyOffset)
   if (bytes[1] === 0) return { name, text: decoder.decode(body) }
-  const mimeType = supportedImageMime(decoder.decode(bytes.subarray(6 + nameLength, bodyOffset)))
-  return { name, text: '', dataUrl: `data:${mimeType};base64,${bytesToBase64(body)}`, mimeType }
+  const media = supportedBinaryMime(decoder.decode(bytes.subarray(6 + nameLength, bodyOffset)))
+  return { name, text: '', mediaBlob: new Blob([body as BlobPart], { type: media.mimeType }), mimeType: media.mimeType, contentKind: media.contentKind }
 }
 
 async function encodeCompressedFile(input: ShareFileInput) {
-  const source = encodeFilePayload(input)
+  const source = await encodeFilePayload(input)
   if (typeof CompressionStream !== 'function') {
     const output = new Uint8Array(1 + source.byteLength)
     output.set(source, 1)
