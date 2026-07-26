@@ -146,7 +146,13 @@ test('expands every sidebar command when the sidebar is wide enough', async ({ p
     await expect(sidebarActions.getByRole('button', { name })).toBeVisible()
   }
   await expect(sidebarActions.getByRole('button', { name: /More actions|更多操作/ })).toHaveCount(0)
-  await sidebarActions.getByRole('button', { name: /Hide file list|隐藏文件列表/ }).click()
+  const expandedHandle = page.locator('.sidebar-resize')
+  const expandedHandleBox = await expandedHandle.boundingBox()
+  expect(expandedHandleBox).not.toBeNull()
+  await page.mouse.move(expandedHandleBox!.x + expandedHandleBox!.width / 2, expandedHandleBox!.y + expandedHandleBox!.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(60, expandedHandleBox!.y + expandedHandleBox!.height / 2, { steps: 8 })
+  await page.mouse.up()
   await expect(page.locator('aside.sidebar')).toBeHidden()
   const showSidebar = page.getByRole('button', { name: /Show file list|显示文件列表/ })
   await expect(showSidebar).toBeVisible()
@@ -306,18 +312,19 @@ test('imports and previews an image document', async ({ page }, testInfo) => {
   const stageBox = await stage.boundingBox()
   expect(stageBox).not.toBeNull()
   const localAnchor = { x: stageBox!.width * .72, y: stageBox!.height * .64 }
-  const beforeAnchor = await stage.evaluate((element, anchor) => ({
-    x: (element.scrollLeft + anchor.x) / element.scrollWidth,
-    y: (element.scrollTop + anchor.y) / element.scrollHeight
-  }), localAnchor)
-  await stage.dispatchEvent('wheel', { ctrlKey: true, deltaY: -100, clientX: stageBox!.x + localAnchor.x, clientY: stageBox!.y + localAnchor.y })
-  await expect(page.locator('.image-toolbar')).toContainText('110%')
-  const afterAnchor = await stage.evaluate((element, anchor) => ({
-    x: (element.scrollLeft + anchor.x) / element.scrollWidth,
-    y: (element.scrollTop + anchor.y) / element.scrollHeight
-  }), localAnchor)
-  expect(Math.abs(afterAnchor.x - beforeAnchor.x)).toBeLessThan(.03)
-  expect(Math.abs(afterAnchor.y - beforeAnchor.y)).toBeLessThan(.03)
+  const pointer = { x: stageBox!.x + localAnchor.x, y: stageBox!.y + localAnchor.y }
+  const imagePointAtPointer = () => page.locator('.image-stage img').evaluate((image, point) => {
+    const rect = image.getBoundingClientRect()
+    return { x: (point.x - rect.left) / rect.width, y: (point.y - rect.top) / rect.height }
+  }, pointer)
+  const beforeAnchor = await imagePointAtPointer()
+  for (const expectedZoom of [110, 120, 130, 140]) {
+    await stage.dispatchEvent('wheel', { ctrlKey: true, deltaY: -100, clientX: pointer.x, clientY: pointer.y })
+    await expect(page.locator('.image-toolbar')).toContainText(`${expectedZoom}%`)
+    const afterAnchor = await imagePointAtPointer()
+    expect(Math.abs(afterAnchor.x - beforeAnchor.x)).toBeLessThan(.015)
+    expect(Math.abs(afterAnchor.y - beforeAnchor.y)).toBeLessThan(.015)
+  }
 })
 
 test('zooms an image around the midpoint of two touches', async ({ page }, testInfo) => {

@@ -12,6 +12,8 @@ import { IconButton } from './components/IconButton'
 import { Sidebar } from './components/Sidebar'
 import { EditorDropZones, WorkspaceDndProvider } from './components/WorkspaceDnd'
 
+const SIDEBAR_COLLAPSE_THRESHOLD = 120
+
 function useNarrow() {
   const [narrow, setNarrow] = useState(() => matchMedia('(max-width: 899px)').matches)
   useEffect(() => {
@@ -44,7 +46,10 @@ export default function App() {
   const folderInput = useRef<HTMLInputElement>(null)
   const sidebarPanelRef = usePanelRef()
   const restoredSidebarCollapse = useRef(false)
+  const sidebarAnimationTimer = useRef<number | null>(null)
+  const sidebarDragCleanup = useRef<(() => void) | null>(null)
   const narrow = useNarrow()
+  const [sidebarAnimating, setSidebarAnimating] = useState(false)
   const [dragTarget, setDragTarget] = useState<'tree' | 'editor' | null>(null)
   const [applyConflictToAll, setApplyConflictToAll] = useState(false)
   const [conflict, setConflict] = useState<null | { name: string; resolve: (result: { choice: 'overwrite' | 'copy' | 'skip'; applyAll: boolean }) => void }>(null)
@@ -61,6 +66,42 @@ export default function App() {
     restoredSidebarCollapse.current = true
     if (layout.sidebarCollapsed) sidebarPanelRef.current?.collapse()
   }, [hydrated, layout.sidebarCollapsed, narrow, sidebarPanelRef])
+  useEffect(() => () => {
+    sidebarDragCleanup.current?.()
+    if (sidebarAnimationTimer.current) window.clearTimeout(sidebarAnimationTimer.current)
+  }, [])
+
+  const animateSidebar = useCallback((action: 'collapse' | 'expand') => {
+    if (sidebarAnimationTimer.current) window.clearTimeout(sidebarAnimationTimer.current)
+    setSidebarAnimating(true)
+    requestAnimationFrame(() => {
+      sidebarPanelRef.current?.[action]()
+      sidebarAnimationTimer.current = window.setTimeout(() => setSidebarAnimating(false), 240)
+    })
+  }, [sidebarPanelRef])
+  const beginSidebarResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || sidebarPanelRef.current?.isCollapsed()) return
+    const startX = event.clientX
+    const startWidth = sidebarPanelRef.current?.getSize().inPixels ?? layout.sidebarWidth
+    let triggered = false
+    const cleanup = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', cleanup)
+      window.removeEventListener('pointercancel', cleanup)
+      sidebarDragCleanup.current = null
+    }
+    const onMove = (moveEvent: PointerEvent) => {
+      if (triggered || startWidth + moveEvent.clientX - startX > SIDEBAR_COLLAPSE_THRESHOLD) return
+      triggered = true
+      animateSidebar('collapse')
+      cleanup()
+    }
+    sidebarDragCleanup.current?.()
+    sidebarDragCleanup.current = cleanup
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', cleanup)
+    window.addEventListener('pointercancel', cleanup)
+  }
 
   const ensureFolders = useCallback((path: string[], root: string | null = null) => {
     let parentId = root
@@ -163,20 +204,20 @@ export default function App() {
   return <Tooltip.Provider><WorkspaceDndProvider>
     <div className="app-shell">
       <main className="workbench">
-        {!narrow ? <Group orientation="horizontal" id="outer-layout">
+        {!narrow ? <Group orientation="horizontal" id="outer-layout" className={sidebarAnimating ? 'sidebar-animating' : undefined}>
           <Panel id="sidebar" panelRef={sidebarPanelRef} defaultSize={`${layout.sidebarWidth}px`} minSize="220px" maxSize="480px" collapsible collapsedSize="0px" onResize={(size) => {
             const collapsed = size.inPixels < 1
             if (collapsed !== layout.sidebarCollapsed) setSidebarCollapsed(collapsed)
             if (!collapsed) setSidebarWidth(size.inPixels)
           }}>
             <div className={`drop-region sidebar-region ${dragTarget === 'tree' ? 'drag-active' : ''}`} onDragEnter={(e) => { if (e.dataTransfer.types.includes('Files')) setDragTarget('tree') }} onDragOver={(e) => e.preventDefault()} onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragTarget(null) }} onDrop={(e) => handleDrop(e, false)}>
-              <Sidebar onImportFiles={() => void pickFiles()} onImportFolder={() => void pickFolder()} onCollapse={() => sidebarPanelRef.current?.collapse()} />
+              <Sidebar onImportFiles={() => void pickFiles()} onImportFolder={() => void pickFolder()} onCollapse={() => animateSidebar('collapse')} />
               {dragTarget === 'tree' && <div className="drop-overlay"><PanelLeft size={26} />{t('dropTree')}</div>}
             </div>
           </Panel>
-          <Separator className={`resize-handle sidebar-resize ${layout.sidebarCollapsed ? 'collapsed' : ''}`} />
+          <Separator className={`resize-handle sidebar-resize ${layout.sidebarCollapsed ? 'collapsed' : ''}`} onPointerDown={beginSidebarResize} />
           <Panel id="editors" minSize="360px">
-            <EditorArea groups={editorGroups} hasSecondary={hasSecondary} splitRatio={layout.splitRatio} setSplitRatio={setSplitRatio} onDrop={(event) => handleDrop(event, true)} dragActive={dragTarget === 'editor'} setDragTarget={setDragTarget} onNewDocument={createQuickDocument} onImportFiles={() => void pickFiles()} leading={layout.sidebarCollapsed ? <IconButton icon={PanelLeftOpen} label={t('showSidebar')} onClick={() => sidebarPanelRef.current?.expand()} /> : undefined} />
+            <EditorArea groups={editorGroups} hasSecondary={hasSecondary} splitRatio={layout.splitRatio} setSplitRatio={setSplitRatio} onDrop={(event) => handleDrop(event, true)} dragActive={dragTarget === 'editor'} setDragTarget={setDragTarget} onNewDocument={createQuickDocument} onImportFiles={() => void pickFiles()} leading={layout.sidebarCollapsed ? <IconButton icon={PanelLeftOpen} label={t('showSidebar')} onClick={() => animateSidebar('expand')} /> : undefined} />
           </Panel>
         </Group> : <>
           <div className={`mobile-editor ${dragTarget === 'editor' ? 'drag-active' : ''}`}

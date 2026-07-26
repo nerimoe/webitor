@@ -26,6 +26,7 @@ export function useLocalZoom<T extends HTMLElement>(value: number, setValue: (va
     if (!element) return
     const update = (next: number, anchor?: ZoomAnchor) => {
       const value = Math.round(clamp(next, options))
+      valueRef.current = value
       if (anchor && options.onZoomAt) options.onZoomAt(value, anchor)
       else setValue(value)
     }

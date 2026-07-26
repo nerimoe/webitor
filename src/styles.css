@@ -103,7 +103,9 @@ button:focus-visible, [role="menuitem"]:focus-visible { outline: 2px solid var(-
 .resize-handle { position: relative; width: 12px; flex: 0 0 12px; background: transparent; z-index: 8; touch-action: none; cursor: col-resize; }
 .resize-handle::before { content: ""; position: absolute; top: 12px; bottom: 12px; left: 50%; width: 3px; transform: translateX(-50%); border-radius: 4px; background: var(--border); }
 .resize-handle::after { content: ""; position: absolute; inset: 0 -4px; }
-.resize-handle:hover::before, .resize-handle[data-resize-handle-active]::before { background: var(--accent); }
+.resize-handle:hover::before, .resize-handle[data-separator="active"]::before { background: var(--accent); }
+.workbench .sidebar-animating #sidebar[data-panel] { transition: flex-grow 220ms cubic-bezier(.22, 1, .36, 1); }
+.workbench .sidebar-animating .sidebar-resize { transition: width 220ms cubic-bezier(.22, 1, .36, 1), flex-basis 220ms cubic-bezier(.22, 1, .36, 1); }
 .sidebar-resize.collapsed { width: 0; flex-basis: 0; }
 .sidebar-resize.collapsed::before, .sidebar-resize.collapsed::after { display: none; }
 .editor-resize { width: 12px; flex-basis: 12px; }

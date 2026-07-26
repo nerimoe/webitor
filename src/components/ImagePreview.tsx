@@ -7,24 +7,22 @@ import { useLocalZoom, type ZoomAnchor } from './useLocalZoom'
 export function ImagePreview({ src, name }: { src: string; name: string }) {
   const { t } = useTranslation()
   const [zoom, setZoom] = useState(100)
-  const pendingAnchor = useRef<{ localX: number; localY: number; contentX: number; contentY: number; width: number; height: number } | null>(null)
+  const imageRef = useRef<HTMLImageElement>(null)
+  const pendingAnchor = useRef<{ clientX: number; clientY: number; imageX: number; imageY: number } | null>(null)
   const stageRef = useLocalZoom<HTMLDivElement>(zoom, setZoom, {
     min: 25,
     max: 400,
     step: 10,
     onZoomAt: (nextZoom, anchor: ZoomAnchor) => {
       const stage = stageRef.current
-      if (!stage) { setZoom(nextZoom); return }
-      const rect = stage.getBoundingClientRect()
-      const localX = anchor.clientX - rect.left
-      const localY = anchor.clientY - rect.top
+      const image = imageRef.current
+      if (!stage || !image) { setZoom(nextZoom); return }
+      const imageRect = image.getBoundingClientRect()
       pendingAnchor.current = {
-        localX,
-        localY,
-        contentX: stage.scrollLeft + localX,
-        contentY: stage.scrollTop + localY,
-        width: stage.scrollWidth,
-        height: stage.scrollHeight
+        clientX: anchor.clientX,
+        clientY: anchor.clientY,
+        imageX: imageRect.width ? (anchor.clientX - imageRect.left) / imageRect.width : 0.5,
+        imageY: imageRect.height ? (anchor.clientY - imageRect.top) / imageRect.height : 0.5
       }
       setZoom(nextZoom)
     }
@@ -40,12 +38,14 @@ export function ImagePreview({ src, name }: { src: string; name: string }) {
   useLayoutEffect(() => {
     const frame = requestAnimationFrame(() => {
       const stage = stageRef.current
+      const image = imageRef.current
       const anchor = pendingAnchor.current
       pendingAnchor.current = null
-      if (!stage || !anchor) { centerImage(); return }
-      stage.scrollTo({
-        left: anchor.contentX * (stage.scrollWidth / anchor.width) - anchor.localX,
-        top: anchor.contentY * (stage.scrollHeight / anchor.height) - anchor.localY
+      if (!stage || !image || !anchor) { centerImage(); return }
+      const imageRect = image.getBoundingClientRect()
+      stage.scrollBy({
+        left: imageRect.left + imageRect.width * anchor.imageX - anchor.clientX,
+        top: imageRect.top + imageRect.height * anchor.imageY - anchor.clientY
       })
     })
     return () => cancelAnimationFrame(frame)
@@ -61,7 +61,7 @@ export function ImagePreview({ src, name }: { src: string; name: string }) {
     </div>
     <div ref={stageRef} className="image-stage">
       <div className="image-canvas" style={{ width: `${Math.max(100, zoom)}%` }}>
-        <img src={src} alt={name} style={{ width: `${Math.min(100, zoom)}%` }} onLoad={centerImage} />
+        <img ref={imageRef} src={src} alt={name} style={{ width: `${Math.min(100, zoom)}%` }} onLoad={centerImage} />
       </div>
     </div>
   </div>
