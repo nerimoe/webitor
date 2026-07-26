@@ -92,7 +92,7 @@ test('renames a document directly from its title', async ({ page }) => {
   await expect(page.getByTestId('sidebar').getByText('renamed-inline.txt', { exact: true })).toBeVisible()
 })
 
-test('preserves the file name and expands document actions when space returns', async ({ page }) => {
+test('preserves the file name and expands document actions when space returns', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 440, height: 720 })
   await page.locator('input[type=file]').first().setInputFiles({ name: 'untitled.txt', mimeType: 'text/plain', buffer: Buffer.from('Text') })
   await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
@@ -114,7 +114,32 @@ test('preserves the file name and expands document actions when space returns', 
 
   await page.setViewportSize({ width: 1000, height: 720 })
   await expect(actions.getByRole('button', { name: /Editing timeline|编辑时间线/ })).toBeVisible()
-  await expect(page.getByTestId('sidebar').getByRole('button', { name: /Settings|设置/ })).toBeVisible()
+  await expect(actions.getByRole('button', { name: /Increase text size|增大文字/ })).toBeVisible()
+  await expect(actions.getByRole('button', { name: /Decrease text size|减小文字/ })).toBeVisible()
+  if (testInfo.project.name !== 'ipad') await expect(actions.getByRole('button', { name: /Save as|另存为/ })).toBeVisible()
+  await expect(actions.getByRole('button', { name: /More actions|更多操作/ })).toHaveCount(0)
+  const sidebarActions = page.getByTestId('sidebar').locator('.sidebar-actions')
+  await expect(sidebarActions.getByRole('button', { name: /New folder|新建文件夹/ })).toBeVisible()
+})
+
+test('expands every sidebar command when the sidebar is wide enough', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium')
+  await page.setViewportSize({ width: 1400, height: 720 })
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'sidebar.txt', mimeType: 'text/plain', buffer: Buffer.from('Text') })
+  const handle = page.locator('.workbench .resize-handle')
+  await expect(handle).toHaveCount(1)
+  const handleBox = await handle.boundingBox()
+  expect(handleBox).not.toBeNull()
+  await page.mouse.move(handleBox!.x + handleBox!.width / 2, handleBox!.y + handleBox!.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(handleBox!.x + 160, handleBox!.y + handleBox!.height / 2)
+  await page.mouse.up()
+
+  const sidebarActions = page.getByTestId('sidebar').locator('.sidebar-actions')
+  for (const name of [/New file|新建文件/, /New folder|新建文件夹/, /Search documents|搜索文档/, /Settings|设置/, /Import files|导入文件/, /Import folder|导入文件夹/, /Export workspace|导出工作区/, /Share documents|分享文档/]) {
+    await expect(sidebarActions.getByRole('button', { name })).toBeVisible()
+  }
+  await expect(sidebarActions.getByRole('button', { name: /More actions|更多操作/ })).toHaveCount(0)
 })
 
 test('shows Markdown preview without a duplicate editor toolbar', async ({ page }, testInfo) => {
@@ -146,8 +171,7 @@ test('moves a listed file into an existing folder', async ({ page }, testInfo) =
   await page.locator('input[type=file]').first().setInputFiles({ name: 'move-me.txt', mimeType: 'text/plain', buffer: Buffer.from('Move me') })
   const sidebar = page.getByTestId('sidebar')
   page.once('dialog', async (dialog) => dialog.accept('Archive'))
-  await sidebar.getByRole('button', { name: /More actions|更多操作/ }).click()
-  await page.getByRole('menuitem', { name: /New folder|新建文件夹/ }).click()
+  await sidebar.getByRole('button', { name: /New folder|新建文件夹/ }).click()
   const source = sidebar.locator('.tree-row', { hasText: 'move-me.txt' })
   const folder = sidebar.locator('.tree-row', { hasText: 'Archive' })
   const sourceBox = await source.boundingBox()

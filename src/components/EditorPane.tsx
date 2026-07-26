@@ -6,7 +6,7 @@ import { bracketMatching, defaultHighlightStyle, foldGutter, foldKeymap, indentO
 import { highlightSelectionMatches, openSearchPanel, searchKeymap } from '@codemirror/search'
 import { EditorView, drawSelection, dropCursor, highlightActiveLine, keymap, lineNumbers } from '@codemirror/view'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Clock3, Eye, EyeOff, FilePlus2, FileText, MoreHorizontal, Redo2, Save, Search, Share2, Undo2, Upload, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { Clock3, Download, Eye, EyeOff, FilePlus2, FileText, MoreHorizontal, Redo2, Save, Search, Share2, Undo2, Upload, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { isMarkdown, loadLanguage } from '../lib/language'
 import { dataUrlToBlob, shareBlob, shareTextFile } from '../lib/files'
@@ -140,25 +140,30 @@ export function EditorPane({ group, leading, onNewDocument, onImportFiles }: Edi
     if (!fileId || !content) return []
     const next: DocumentAction[] = []
     if (!image) {
-      next.push({ id: 'undo', priority: 5, label: t('undo'), icon: Undo2, onClick: () => run(undo) })
-      next.push({ id: 'redo', priority: 6, label: t('redo'), icon: Redo2, onClick: () => run(redo) })
+      next.push({ id: 'undo', priority: 2, label: t('undo'), icon: Undo2, onClick: () => run(undo) })
+      next.push({ id: 'redo', priority: 3, label: t('redo'), icon: Redo2, onClick: () => run(redo) })
       next.push({ id: 'search', priority: 4, label: t('search'), icon: Search, onClick: () => run(openSearchPanel) })
     }
-    if (!iOS) next.push({ id: 'save', priority: 1, label: t('save'), icon: Save, onClick: () => void saveFile(fileId) })
-    next.push({ id: 'share', priority: 2, label: t('share'), icon: Share2, onClick: () => content.dataUrl
+    if (!iOS) {
+      next.push({ id: 'save', priority: 0, label: t('save'), icon: Save, onClick: () => void saveFile(fileId) })
+      next.push({ id: 'save-as', priority: 7, label: t('saveAs'), icon: Download, onClick: () => void saveFile(fileId, true) })
+    }
+    next.push({ id: 'share', priority: 1, label: t('share'), icon: Share2, onClick: () => content.dataUrl
       ? void shareBlob(dataUrlToBlob(content.dataUrl), node?.name ?? 'image')
       : void shareTextFile(content.text, node?.name ?? 'document.txt') })
-    if (!image) next.push({ id: 'timeline', priority: 7, label: t('timeline'), icon: Clock3, onClick: () => setTimelineOpen(true) })
-    if (markdown) next.push({ id: 'preview', priority: 3, label: t('preview'), icon: Eye, active: previewActive, onClick: () => group.id === 'primary' ? previewMarkdown(fileId) : setGroupView(group.id, group.view === 'editor' ? 'markdown-preview' : 'editor') })
+    if (!image) {
+      next.push({ id: 'timeline', priority: 6, label: t('timeline'), icon: Clock3, onClick: () => setTimelineOpen(true) })
+      next.push({ id: 'zoom-in', priority: 8, label: t('increaseTextSize'), icon: ZoomIn, onClick: () => setEditorFontSize(editorFontSize + 1) })
+      next.push({ id: 'zoom-out', priority: 9, label: t('decreaseTextSize'), icon: ZoomOut, onClick: () => setEditorFontSize(editorFontSize - 1) })
+    }
+    if (markdown) next.push({ id: 'preview', priority: 5, label: t('preview'), icon: Eye, active: previewActive, onClick: () => group.id === 'primary' ? previewMarkdown(fileId) : setGroupView(group.id, group.view === 'editor' ? 'markdown-preview' : 'editor') })
     return next
   // Action callbacks intentionally follow the current editor instance and file.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [content, fileId, group.id, group.view, iOS, image, markdown, node?.name, previewActive, splitActive, t])
+  }, [content, editorFontSize, fileId, group.id, group.view, iOS, image, markdown, node?.name, previewActive, splitActive, t])
   const { ref: actionsRef, visible: visibleActions, overflow: overflowActions } = useActionOverflow(actions, {
-    alwaysOverflow: Boolean(fileId) && (!iOS || !image),
     fixedSlots: 1
   })
-  const showMore = !iOS || !image || overflowActions.length > 0
 
   const renderAction = (action: DocumentAction) => <IconButton key={action.id} icon={action.icon} label={action.label} active={action.active} onClick={action.onClick} />
 
@@ -191,12 +196,10 @@ export function EditorPane({ group, leading, onNewDocument, onImportFiles }: Edi
         </div> : <div className="document-title no-document-title"><span>{t('noFileTitle')}</span></div>}
         {fileId && <div ref={actionsRef} className="editor-actions">
           {visibleActions.map(renderAction)}
-          {showMore && <DropdownMenu.Root>
+          {overflowActions.length > 0 && <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild><IconButton icon={MoreHorizontal} label={t('moreActions')} /></DropdownMenu.Trigger>
             <DropdownMenu.Portal><DropdownMenu.Content className="menu-content" align="end">
               {overflowActions.map(renderOverflowAction)}
-              {!iOS && <><DropdownMenu.Separator className="menu-separator" /><DropdownMenu.Item className="menu-item with-icon" onSelect={() => void saveFile(fileId, true)}><Save size={18} />{t('saveAs')}</DropdownMenu.Item></>}
-              {!image && <><DropdownMenu.Separator className="menu-separator" /><DropdownMenu.Item className="menu-item with-icon" onSelect={() => setEditorFontSize(editorFontSize + 1)}><ZoomIn size={18} />{t('increaseTextSize')}</DropdownMenu.Item><DropdownMenu.Item className="menu-item with-icon" onSelect={() => setEditorFontSize(editorFontSize - 1)}><ZoomOut size={18} />{t('decreaseTextSize')}</DropdownMenu.Item></>}
             </DropdownMenu.Content></DropdownMenu.Portal>
           </DropdownMenu.Root>}
           <IconButton icon={X} label={splitActive ? t('closePane') : t('closeFile')} className="pane-close" onPointerDown={(event) => { event.preventDefault(); event.stopPropagation(); closePane() }} onKeyDown={closePaneFromKeyboard} />
