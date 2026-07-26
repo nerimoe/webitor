@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Download, FilePlus2, FolderInput, FolderPlus, MoreHorizontal, PanelLeftClose, Search, Share2, Upload } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { shareWorkspace, workspaceZip } from '../lib/files'
+import { canShareWorkspace, shareWorkspace, workspaceZip } from '../lib/files'
 import { useWorkspace } from '../store/useWorkspace'
 import { FileTree } from './FileTree'
 import { IconButton } from './IconButton'
@@ -23,6 +23,7 @@ export function Sidebar({ onImportFiles, onImportFolder, onCollapse }: {
   const workspace = useWorkspace((state) => state.workspace)
   const addFile = useWorkspace((state) => state.addFile)
   const addDirectory = useWorkspace((state) => state.addDirectory)
+  const shareSupported = canShareWorkspace(workspace.name)
   const longPress = useRef<ReturnType<typeof setTimeout> | null>(null)
   const treeScroll = useRef<HTMLDivElement>(null)
   const pullState = useRef<{ startY: number | null; offset: number; wheelTimer: ReturnType<typeof setTimeout> | null }>({ startY: null, offset: 0, wheelTimer: null })
@@ -32,7 +33,8 @@ export function Sidebar({ onImportFiles, onImportFolder, onCollapse }: {
   const { ref: actionsRef, visible, overflow } = useActionOverflow([
     ...(onCollapse ? [{ id: 'collapse', priority: 0 }] : []),
     { id: 'new', priority: 1 }, { id: 'folder', priority: 2 }, { id: 'search', priority: 3 }, { id: 'settings', priority: 4 },
-    { id: 'import-files', priority: 5 }, { id: 'import-folder', priority: 6 }, { id: 'export', priority: 7 }, { id: 'share', priority: 8 }
+    { id: 'import-files', priority: 5 }, { id: 'import-folder', priority: 6 }, { id: 'export', priority: 7 },
+    ...(shareSupported ? [{ id: 'share', priority: 8 }] : [])
   ])
   const visibleIds = new Set(visible.map((item) => item.id))
   const createFile = () => {

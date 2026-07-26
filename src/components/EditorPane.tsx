@@ -7,10 +7,10 @@ import { highlightSelectionMatches, openSearchPanel, searchKeymap } from '@codem
 import { EditorView, drawSelection, dropCursor, highlightActiveLine, keymap, lineNumbers } from '@codemirror/view'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Tooltip from '@radix-ui/react-tooltip'
-import { Clock3, Download, Eye, EyeOff, FilePlus2, FileText, MoreHorizontal, Redo2, RotateCcw, Save, Search, Share2, Undo2, Upload, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { Clock3, Download, Eye, EyeOff, FilePlus2, FileText, MoreHorizontal, Redo2, RotateCcw, Save, SaveAll, Search, Share2, Undo2, Upload, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { isMarkdown, loadLanguage } from '../lib/language'
-import { dataUrlToBlob, shareBlob, shareTextFile } from '../lib/files'
+import { canShareBlob, dataUrlToBlob, shareBlob, shareTextFile } from '../lib/files'
 import { useWorkspace } from '../store/useWorkspace'
 import type { EditorGroup } from '../types'
 import { IconButton } from './IconButton'
@@ -147,13 +147,14 @@ export function EditorPane({ group, leading, onNewDocument, onImportFiles }: Edi
       next.push({ id: 'redo', priority: 3, label: t('redo'), icon: Redo2, onClick: () => run(redo) })
       next.push({ id: 'search', priority: 4, label: t('search'), icon: Search, onClick: () => run(openSearchPanel) })
     }
+    const name = node?.name ?? (image ? 'image' : 'document.txt')
+    const blob = content.dataUrl ? dataUrlToBlob(content.dataUrl) : new Blob([content.text], { type: 'text/plain' })
+    const share = () => content.dataUrl ? void shareBlob(blob, name) : void shareTextFile(content.text, name)
     if (!iOS) {
-      next.push({ id: 'save', priority: 0, label: t('save'), icon: Save, onClick: () => void saveFile(fileId) })
-      next.push({ id: 'save-as', priority: 7, label: t('saveAs'), icon: Download, onClick: () => void saveFile(fileId, true) })
+      next.push({ id: 'save', priority: 0, label: t(node?.handle ? 'save' : 'download'), icon: node?.handle ? Save : Download, onClick: () => void saveFile(fileId) })
+      if (window.showSaveFilePicker) next.push({ id: 'save-as', priority: 7, label: t('saveAs'), icon: SaveAll, onClick: () => void saveFile(fileId, true) })
     }
-    next.push({ id: 'share', priority: 1, label: t('share'), icon: Share2, onClick: () => content.dataUrl
-      ? void shareBlob(dataUrlToBlob(content.dataUrl), node?.name ?? 'image')
-      : void shareTextFile(content.text, node?.name ?? 'document.txt') })
+    if (iOS || canShareBlob(blob, name)) next.push({ id: 'share', priority: iOS ? 0 : 2, label: t('share'), icon: Share2, onClick: share })
     if (!image) {
       next.push({ id: 'timeline', priority: 6, label: t('timeline'), icon: Clock3, onClick: () => setTimelineOpen(true) })
       next.push({ id: 'zoom-out', priority: 9, label: t('decreaseTextSize'), icon: ZoomOut, onClick: () => setEditorFontSize(editorFontSize - 1) })
@@ -164,7 +165,7 @@ export function EditorPane({ group, leading, onNewDocument, onImportFiles }: Edi
     return next
   // Action callbacks intentionally follow the current editor instance and file.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [content, editorFontSize, fileId, group.id, group.view, iOS, image, markdown, node?.name, previewActive, splitActive, t])
+  }, [content, editorFontSize, fileId, group.id, group.view, iOS, image, markdown, node?.handle, node?.name, previewActive, splitActive, t])
   const { ref: actionsRef, visible: visibleActions, overflow: overflowActions } = useActionOverflow(actions, {
     fixedSlots: 1
   })

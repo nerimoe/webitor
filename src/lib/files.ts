@@ -47,22 +47,26 @@ export function downloadText(text: string, name: string) {
   downloadBlob(new Blob([text], { type: 'text/plain;charset=utf-8' }), name)
 }
 
+export function canShareBlob(blob: Blob, name: string) {
+  if (!navigator.share) return false
+  const file = new File([blob], name, { type: blob.type || 'application/octet-stream' })
+  try { return !navigator.canShare || navigator.canShare({ files: [file] }) } catch { return false }
+}
+
 export async function shareBlob(blob: Blob, name: string, title = name) {
   const file = new File([blob], name, { type: blob.type || 'application/octet-stream' })
-  if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
-    try {
-      await navigator.share({ title, files: [file] })
-      return true
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') return true
-    }
+  if (!canShareBlob(blob, name)) return false
+  try {
+    await navigator.share({ title, files: [file] })
+    return true
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') return true
+    return false
   }
-  downloadBlob(blob, name)
-  return false
 }
 
 export function shareTextFile(text: string, name: string) {
-  return shareBlob(new Blob([text], { type: 'text/plain;charset=utf-8' }), name)
+  return shareBlob(new Blob([text], { type: 'text/plain' }), name)
 }
 
 function createWorkspaceZip(
@@ -100,6 +104,10 @@ export function shareWorkspace(
   workspaceName: string
 ) {
   return shareBlob(createWorkspaceZip(nodes, contents), `${workspaceName}.zip`, workspaceName)
+}
+
+export function canShareWorkspace(workspaceName: string) {
+  return canShareBlob(new Blob([], { type: 'application/zip' }), `${workspaceName}.zip`)
 }
 
 export async function collectDirectory(

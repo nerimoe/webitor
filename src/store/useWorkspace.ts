@@ -303,11 +303,11 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
     if (!node || !content) return
     try {
       let handle = forceDialog ? undefined : node.handle
-      if (handle) {
+      if (!forceDialog && handle) {
         const permission = await handle.requestPermission({ mode: 'readwrite' })
-        if (permission !== 'granted') handle = undefined
+        if (permission !== 'granted') throw new Error('Write permission was not granted')
       }
-      if (!handle && window.showSaveFilePicker) {
+      if (forceDialog && window.showSaveFilePicker) {
         handle = await window.showSaveFilePicker({ suggestedName: node.name })
         set((state) => ({ nodes: { ...state.nodes, [fileId]: { ...node, handle, source: 'picker' } } }))
       }

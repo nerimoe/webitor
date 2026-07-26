@@ -122,7 +122,7 @@ test('preserves the file name and expands document actions when space returns', 
   await expect(actions.getByRole('button', { name: /Reset text size.*17 px|重置字号.*17 px/ })).toHaveText('17')
   await actions.getByRole('button', { name: /Reset text size.*17 px|重置字号.*17 px/ }).click()
   await expect(actions.getByRole('button', { name: /Reset text size.*16 px|重置字号.*16 px/ })).toHaveText('16')
-  if (testInfo.project.name !== 'ipad') await expect(actions.getByRole('button', { name: /Save as|另存为/ })).toBeVisible()
+  if (testInfo.project.name !== 'ipad') await expect(actions.getByRole('button', { name: /Download|下载/ })).toBeVisible()
   await expect(actions.getByRole('button', { name: /More actions|更多操作/ })).toHaveCount(0)
   const sidebarActions = page.getByTestId('sidebar').locator('.sidebar-actions')
   await expect(sidebarActions.getByRole('button', { name: /New folder|新建文件夹/ })).toBeVisible()
@@ -142,7 +142,7 @@ test('expands every sidebar command when the sidebar is wide enough', async ({ p
   await page.mouse.up()
 
   const sidebarActions = page.getByTestId('sidebar').locator('.sidebar-actions')
-  for (const name of [/Hide file list|隐藏文件列表/, /New file|新建文件/, /New folder|新建文件夹/, /Search documents|搜索文档/, /Settings|设置/, /Import files|导入文件/, /Import folder|导入文件夹/, /Export workspace|导出工作区/, /Share documents|分享文档/]) {
+  for (const name of [/Hide file list|隐藏文件列表/, /New file|新建文件/, /New folder|新建文件夹/, /Search documents|搜索文档/, /Settings|设置/, /Import files|导入文件/, /Import folder|导入文件夹/, /Export workspace|导出工作区/]) {
     await expect(sidebarActions.getByRole('button', { name })).toBeVisible()
   }
   await expect(sidebarActions.getByRole('button', { name: /More actions|更多操作/ })).toHaveCount(0)
@@ -471,6 +471,46 @@ test('uses one share action for file output on iPad', async ({ page }, testInfo)
   const editor = page.getByTestId('editor-primary')
   await expect(editor.getByRole('button', { name: /Share|分享/ })).toBeVisible()
   await expect(editor.getByRole('button', { name: /^Save$|^保存$/ })).toHaveCount(0)
+  await expect(editor.getByRole('button', { name: /Download|下载/ })).toHaveCount(0)
+})
+
+test('downloads a document without opening a path picker', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium')
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'download.txt', mimeType: 'text/plain', buffer: Buffer.from('Download') })
+  await page.getByTestId('sidebar').getByText('download.txt', { exact: true }).click()
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByTestId('editor-primary').getByRole('button', { name: /Download|下载/ }).click()
+  expect((await downloadPromise).suggestedFilename()).toBe('download.txt')
+})
+
+test('uses the system share API instead of downloading', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium')
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'canShare', { configurable: true, value: () => true })
+    Object.defineProperty(navigator, 'share', { configurable: true, value: async (data: ShareData) => { (window as Window & { sharedName?: string }).sharedName = data.files?.[0]?.name } })
+  })
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'shared.txt', mimeType: 'text/plain', buffer: Buffer.from('Shared') })
+  await page.getByTestId('sidebar').getByText('shared.txt', { exact: true }).click()
+  await page.getByTestId('editor-primary').getByRole('button', { name: /Share|分享/ }).click()
+  await expect.poll(() => page.evaluate(() => (window as Window & { sharedName?: string }).sharedName)).toBe('shared.txt')
+})
+
+test('opens the system path picker only for save as', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium')
+  await page.evaluate(() => {
+    Object.defineProperty(window, 'showSaveFilePicker', { configurable: true, value: async ({ suggestedName }: { suggestedName: string }) => {
+      (window as Window & { savedAsName?: string }).savedAsName = suggestedName
+      return { kind: 'file', name: suggestedName, requestPermission: async () => 'granted', queryPermission: async () => 'granted', createWritable: async () => ({ write: async () => { const target = window as Window & { savedWriteCount?: number }; target.savedWriteCount = (target.savedWriteCount ?? 0) + 1 }, close: async () => undefined }), getFile: async () => new File([], suggestedName) }
+    } })
+  })
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'save-as.txt', mimeType: 'text/plain', buffer: Buffer.from('Save as') })
+  await page.getByTestId('sidebar').getByText('save-as.txt', { exact: true }).click()
+  await page.getByTestId('editor-primary').getByRole('button', { name: /Save as|另存为/ }).click()
+  await expect.poll(() => page.evaluate(() => (window as Window & { savedAsName?: string }).savedAsName)).toBe('save-as.txt')
+  const save = page.getByTestId('editor-primary').getByRole('button', { name: /^Save$|^保存$/ })
+  await expect(save).toBeVisible()
+  await save.click()
+  await expect.poll(() => page.evaluate(() => (window as Window & { savedWriteCount?: number }).savedWriteCount)).toBe(2)
 })
 
 test('reorders documents by dropping above another document', async ({ page }, testInfo) => {
