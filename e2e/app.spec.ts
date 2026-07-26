@@ -57,6 +57,10 @@ test('opens a file dropped on the editor', async ({ page }) => {
 })
 
 test('reimports the same share link through the normal conflict flow', async ({ page }, testInfo) => {
+  let uploadRequests = 0
+  page.on('request', (request) => {
+    if (request.method() === 'PUT' && request.url().includes('/api/shares/')) uploadRequests += 1
+  })
   await page.evaluate(() => {
     Object.defineProperty(navigator, 'share', {
       configurable: true,
@@ -79,12 +83,28 @@ test('reimports the same share link through the normal conflict flow', async ({ 
     await page.getByRole('button', { name: /More actions|更多操作/ }).click()
     await page.getByRole('menuitem', { name: /Create share link|创建分享链接/ }).click()
   }
+  await expect(page.getByRole('dialog')).toContainText(/encrypted share link|加密分享链接/i)
+  expect(uploadRequests).toBe(0)
+  await page.getByRole('button', { name: /^(Create link|创建链接)$/ }).click()
+  await expect.poll(() => uploadRequests).toBe(1)
+  await page.getByRole('button', { name: /^(Share link|分享链接)$/ }).click()
   await expect.poll(() => page.evaluate(() => (window as Window & { __sharedFileUrl?: string }).__sharedFileUrl)).toContain('?share=')
   const url = await page.evaluate(() => (window as Window & { __sharedFileUrl?: string }).__sharedFileUrl)
   expect(url).toMatch(/\?share=[A-Za-z0-9_-]{16}#key=[A-Za-z0-9_-]{43}$/)
   expect(url!.length).toBeLessThan(150)
   expect(url).not.toContain(text.slice(0, 16))
+  await page.addInitScript(() => {
+    const originalFetch = window.fetch.bind(window)
+    window.fetch = async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      if (request.method === 'GET' && new URL(request.url).pathname.startsWith('/api/shares/')) {
+        await new Promise((resolve) => setTimeout(resolve, 1200))
+      }
+      return originalFetch(input, init)
+    }
+  })
   await page.goto(url!)
+  await expect(page.locator('.transfer-status')).toContainText(/Downloading encrypted file|正在下载加密文件/i)
   await expect(page.getByRole('dialog')).toContainText('shared-note.txt')
   await page.getByRole('button', { name: /Keep both|保留两份/ }).click()
   await expect(page.getByTestId('editor-primary').locator('.document-title')).toContainText('shared-note 2.txt')
@@ -119,6 +139,8 @@ test('can overwrite an existing file when importing a share link', async ({ page
     await page.getByRole('button', { name: /More actions|更多操作/ }).click()
     await page.getByRole('menuitem', { name: /Create share link|创建分享链接/ }).click()
   }
+  await page.getByRole('button', { name: /^(Create link|创建链接)$/ }).click()
+  await page.getByRole('button', { name: /^(Share link|分享链接)$/ }).click()
   await expect.poll(() => page.evaluate(() => (window as Window & { __sharedFileUrl?: string }).__sharedFileUrl)).toContain('?share=')
   const url = await page.evaluate(() => (window as Window & { __sharedFileUrl?: string }).__sharedFileUrl)
   await page.locator('.cm-content').fill('Locally changed text')

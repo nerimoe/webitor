@@ -25,6 +25,13 @@ export interface SharedFile {
   mimeType?: string
 }
 
+export type ShareLinkProgress = {
+  phase: 'compressing' | 'encrypting' | 'uploading' | 'downloading' | 'decrypting'
+  progress?: number
+}
+
+type ProgressHandler = (progress: ShareLinkProgress) => void
+
 export type ShareLinkErrorCode =
   | 'missing'
   | 'invalid'
@@ -210,12 +217,14 @@ export function cleanFileShareUrl() {
   history.replaceState(null, '', `${clean.pathname}${clean.search}`)
 }
 
-export async function createFileShareUrl(input: ShareFileInput, baseUrl = location.href) {
+export async function createFileShareUrl(input: ShareFileInput, baseUrl = location.href, onProgress?: ProgressHandler) {
+  onProgress?.({ phase: 'compressing' })
   const payload = await encodeCompressedFile(input)
   const id = bytesToBase64Url(randomBytes(SHARE_ID_BYTES))
   const keyBytes = randomBytes(AES_KEY_BYTES)
   const iv = randomBytes(IV_BYTES)
   const key = await importAesKey(keyBytes, 'encrypt')
+  onProgress?.({ phase: 'encrypting' })
   const encrypted = new Uint8Array(await crypto.subtle.encrypt({
     name: 'AES-GCM',
     iv,
@@ -230,6 +239,7 @@ export async function createFileShareUrl(input: ShareFileInput, baseUrl = locati
 
   let response: Response
   try {
+    onProgress?.({ phase: 'uploading' })
     response = await fetch(`${API_PATH}/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/octet-stream' },
@@ -246,7 +256,36 @@ export async function createFileShareUrl(input: ShareFileInput, baseUrl = locati
   return url.toString()
 }
 
-export async function readFileShareUrl(href = location.href): Promise<SharedFile> {
+async function readEncryptedResponse(response: Response, onProgress?: ProgressHandler) {
+  const declaredLength = Number(response.headers.get('Content-Length') ?? 0)
+  if (declaredLength > MAX_ENCRYPTED_BYTES) return fail('tooLarge', 'The encrypted share exceeds the size limit')
+  onProgress?.({ phase: 'downloading', progress: declaredLength > 0 ? 0 : undefined })
+  if (!response.body) return new Uint8Array(await response.arrayBuffer())
+
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let size = 0
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    size += value.byteLength
+    if (size > MAX_ENCRYPTED_BYTES) {
+      await reader.cancel()
+      return fail('tooLarge', 'The encrypted share exceeds the size limit')
+    }
+    chunks.push(value)
+    onProgress?.({ phase: 'downloading', progress: declaredLength > 0 ? Math.min(1, size / declaredLength) : undefined })
+  }
+  const bytes = new Uint8Array(size)
+  let offset = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return bytes
+}
+
+export async function readFileShareUrl(href = location.href, onProgress?: ProgressHandler): Promise<SharedFile> {
   const url = new URL(href)
   const id = shareIdFrom(url)
   const keyBytes = shareKeyFrom(url)
@@ -257,9 +296,7 @@ export async function readFileShareUrl(href = location.href): Promise<SharedFile
   if (response.status === 404) return fail('notFound', 'The encrypted share was not found')
   if (response.status === 410) return fail('expired', 'The encrypted share has expired')
   if (!response.ok) return fail('network', 'The encrypted share could not be downloaded')
-  const length = Number(response.headers.get('Content-Length') ?? 0)
-  if (length > MAX_ENCRYPTED_BYTES) return fail('tooLarge', 'The encrypted share exceeds the size limit')
-  const stored = new Uint8Array(await response.arrayBuffer())
+  const stored = await readEncryptedResponse(response, onProgress)
   if (stored.byteLength > MAX_ENCRYPTED_BYTES) return fail('tooLarge', 'The encrypted share exceeds the size limit')
   if (stored.byteLength <= 1 + IV_BYTES || stored[0] !== ENCRYPTED_PAYLOAD_VERSION) {
     return fail('unsupportedVersion', 'The encrypted share version is not supported')
@@ -269,6 +306,7 @@ export async function readFileShareUrl(href = location.href): Promise<SharedFile
   const key = await importAesKey(keyBytes, 'decrypt')
   let plaintext: ArrayBuffer
   try {
+    onProgress?.({ phase: 'decrypting' })
     plaintext = await crypto.subtle.decrypt({
       name: 'AES-GCM',
       iv,

@@ -5,13 +5,14 @@ import { closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirro
 import { bracketMatching, defaultHighlightStyle, foldGutter, foldKeymap, indentOnInput, syntaxHighlighting } from '@codemirror/language'
 import { highlightSelectionMatches, openSearchPanel, search, searchKeymap } from '@codemirror/search'
 import { EditorView, drawSelection, dropCursor, highlightActiveLine, keymap, lineNumbers } from '@codemirror/view'
+import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Tooltip from '@radix-ui/react-tooltip'
 import { Clock3, Download, Eye, EyeOff, FilePlus2, FileText, Link2, MoreHorizontal, Redo2, RotateCcw, Save, SaveAll, Search, Share2, Undo2, Upload, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { isMarkdown, loadLanguage } from '../lib/language'
 import { canShareBlob, dataUrlToBlob, shareBlob, shareTextFile } from '../lib/files'
-import { createFileShareUrl, shareOrCopyFileUrl, ShareLinkError } from '../lib/shareLink'
+import { createFileShareUrl, shareOrCopyFileUrl, ShareLinkError, type ShareLinkProgress } from '../lib/shareLink'
 import { useWorkspace } from '../store/useWorkspace'
 import type { EditorGroup } from '../types'
 import { IconButton } from './IconButton'
@@ -20,6 +21,7 @@ import { ImagePreview } from './ImagePreview'
 import { TimelineDialog } from './TimelineDialog'
 import { useActionOverflow, type OverflowAction } from './useActionOverflow'
 import { useLocalZoom } from './useLocalZoom'
+import { TransferStatus } from './TransferStatus'
 
 const editorHistory = new Map<string, ReturnType<NonNullable<ReactCodeMirrorRef['state']>['toJSON']>>()
 
@@ -66,6 +68,9 @@ export function EditorPane({ group, leading, onNewDocument, onImportFiles }: Edi
   const [renaming, setRenaming] = useState(false)
   const [draftName, setDraftName] = useState('')
   const [timelineOpen, setTimelineOpen] = useState(false)
+  const [shareDialogOpen, setShareDialogOpen] = useState(false)
+  const [shareProgress, setShareProgress] = useState<ShareLinkProgress | null>(null)
+  const [generatedShareUrl, setGeneratedShareUrl] = useState<string | null>(null)
   const ref = useRef<ReactCodeMirrorRef>(null)
   const titleInput = useRef<HTMLInputElement>(null)
   const { ref: codeZoomRef } = useLocalZoom<HTMLDivElement>(editorFontSize, setEditorFontSize, { min: 12, max: 28, step: 1 })
@@ -161,6 +166,35 @@ export function EditorPane({ group, leading, onNewDocument, onImportFiles }: Edi
     if (node && draftName.trim()) renameNode(node.id, draftName)
     setRenaming(false)
   }
+  const createShareLink = async () => {
+    if (!content || shareProgress) return
+    const name = node?.name ?? (image ? 'image' : 'document.txt')
+    try {
+      const url = await createFileShareUrl(
+        { name, text: content.text, dataUrl: content.dataUrl, mimeType: content.mimeType },
+        location.href,
+        setShareProgress
+      )
+      setShareProgress(null)
+      setGeneratedShareUrl(url)
+    } catch (error) {
+      if (error instanceof ShareLinkError && error.code === 'tooLarge') setNotice('shareLinkTooLarge')
+      else if (error instanceof ShareLinkError && error.code === 'rateLimited') setNotice('shareLinkRateLimited')
+      else setNotice('shareLinkFailed')
+    } finally {
+      setShareProgress(null)
+    }
+  }
+  const shareGeneratedLink = async () => {
+    if (!generatedShareUrl) return
+    const name = node?.name ?? (image ? 'image' : 'document.txt')
+    try {
+      const result = await shareOrCopyFileUrl(generatedShareUrl, name)
+      if (result === 'copied') setNotice('shareLinkCopied')
+      setShareDialogOpen(false)
+      setGeneratedShareUrl(null)
+    } catch { setNotice('shareLinkFailed') }
+  }
 
   const actions = useMemo<DocumentAction[]>(() => {
     if (!fileId || !content) return []
@@ -173,23 +207,12 @@ export function EditorPane({ group, leading, onNewDocument, onImportFiles }: Edi
     const name = node?.name ?? (image ? 'image' : 'document.txt')
     const blob = content.dataUrl ? dataUrlToBlob(content.dataUrl) : new Blob([content.text], { type: 'text/plain' })
     const share = () => content.dataUrl ? void shareBlob(blob, name) : void shareTextFile(content.text, name)
-    const shareLink = async () => {
-      try {
-        const url = await createFileShareUrl({ name, text: content.text, dataUrl: content.dataUrl, mimeType: content.mimeType })
-        const result = await shareOrCopyFileUrl(url, name)
-        if (result === 'copied') setNotice('shareLinkCopied')
-      } catch (error) {
-        if (error instanceof ShareLinkError && error.code === 'tooLarge') setNotice('shareLinkTooLarge')
-        else if (error instanceof ShareLinkError && error.code === 'rateLimited') setNotice('shareLinkRateLimited')
-        else setNotice('shareLinkFailed')
-      }
-    }
     if (!iOS) {
       next.push({ id: 'save', priority: 0, label: t(node?.handle ? 'save' : 'download'), icon: node?.handle ? Save : Download, onClick: () => void saveFile(fileId) })
       if (window.showSaveFilePicker) next.push({ id: 'save-as', priority: 7, label: t('saveAs'), icon: SaveAll, onClick: () => void saveFile(fileId, true) })
     }
     if (iOS || canShareBlob(blob, name)) next.push({ id: 'share', priority: iOS ? 0 : 2, label: t('share'), icon: Share2, onClick: share })
-    next.push({ id: 'share-link', priority: 5, label: t('createShareLink'), icon: Link2, onClick: () => void shareLink() })
+    next.push({ id: 'share-link', priority: 5, label: t('createShareLink'), icon: Link2, onClick: () => setShareDialogOpen(true) })
     if (!image) {
       next.push({ id: 'timeline', priority: 6, label: t('timeline'), icon: Clock3, onClick: () => setTimelineOpen(true) })
       next.push({ id: 'zoom-out', priority: 9, label: t('decreaseTextSize'), icon: ZoomOut, onClick: () => setEditorFontSize(editorFontSize - 1) })
@@ -258,6 +281,25 @@ export function EditorPane({ group, leading, onNewDocument, onImportFiles }: Edi
         : <div ref={codeZoomRef} className="code-editor" style={{ '--editor-font-size': `${editorFontSize}px` } as CSSProperties}><CodeMirror key={fileId} ref={ref} value={content.text} initialState={initialEditorState} extensions={extensions} theme={dark ? 'dark' : 'light'} onChange={(value) => updateContent(fileId, value)} basicSetup={false} /></div>}
       {content && <DocumentStatusBar fileType={fileType} lines={textStats?.lines} characters={textStats?.characters} status={content.status} />}
       {fileId && !image && <TimelineDialog fileId={fileId} open={timelineOpen} onOpenChange={setTimelineOpen} />}
+      <Dialog.Root open={shareDialogOpen} onOpenChange={(open) => {
+        if (shareProgress) return
+        setShareDialogOpen(open)
+        if (!open) setGeneratedShareUrl(null)
+      }}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="dialog-overlay" />
+          <Dialog.Content className="dialog-content share-dialog" onEscapeKeyDown={(event) => { if (shareProgress) event.preventDefault() }} onPointerDownOutside={(event) => { if (shareProgress) event.preventDefault() }}>
+            <Dialog.Title>{t(generatedShareUrl ? 'shareReadyTitle' : 'shareConfirmTitle')}</Dialog.Title>
+            <Dialog.Description>{t(generatedShareUrl ? 'shareReadyBody' : 'shareConfirmBody')}</Dialog.Description>
+            {shareProgress && <TransferStatus label={t(`sharePhase_${shareProgress.phase}`)} progress={shareProgress.progress} />}
+            {generatedShareUrl && <input className="share-link-output" aria-label={t('generatedShareLink')} readOnly value={generatedShareUrl} onFocus={(event) => event.currentTarget.select()} />}
+            <div className="dialog-actions">
+              <Dialog.Close asChild><button className="secondary-button" disabled={Boolean(shareProgress)}>{t(generatedShareUrl ? 'close' : 'cancel')}</button></Dialog.Close>
+              <button className="primary-button" disabled={Boolean(shareProgress)} onClick={() => void (generatedShareUrl ? shareGeneratedLink() : createShareLink())}>{t(generatedShareUrl ? 'shareCreatedLink' : shareProgress ? 'creatingShareLink' : 'confirmCreateShareLink')}</button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </section>
   )
 }

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { createFileShareUrl, readFileShareUrl, ShareLinkError, shareOrCopyFileUrl } from './shareLink'
+import { createFileShareUrl, readFileShareUrl, ShareLinkError, shareOrCopyFileUrl, type ShareLinkProgress } from './shareLink'
 
 const storedShares = new Map<string, Uint8Array>()
 
@@ -26,13 +26,18 @@ beforeEach(() => {
 describe('encrypted file share links', () => {
   it('round-trips text through a short encrypted link', async () => {
     const text = 'A local document with repeated text. '.repeat(200)
-    const url = await createFileShareUrl({ name: 'notes.md', text }, 'https://webitor.example/editor')
+    const createProgress: ShareLinkProgress[] = []
+    const url = await createFileShareUrl({ name: 'notes.md', text }, 'https://webitor.example/editor', (progress) => createProgress.push(progress))
 
     expect(url).toMatch(/^https:\/\/webitor\.example\/editor\?share=[A-Za-z0-9_-]{16}#key=[A-Za-z0-9_-]{43}$/)
     expect(url.length).toBeLessThan(150)
     expect(url).not.toContain('notes')
     expect(new TextDecoder().decode([...storedShares.values()][0])).not.toContain(text.slice(0, 20))
-    await expect(readFileShareUrl(url)).resolves.toEqual({ name: 'notes.md', text })
+    expect(createProgress.map(({ phase }) => phase)).toEqual(['compressing', 'encrypting', 'uploading'])
+    const readProgress: ShareLinkProgress[] = []
+    await expect(readFileShareUrl(url, (progress) => readProgress.push(progress))).resolves.toEqual({ name: 'notes.md', text })
+    expect(readProgress.map(({ phase }) => phase)).toEqual(['downloading', 'downloading', 'decrypting'])
+    expect(readProgress[1].progress).toBe(1)
   })
 
   it('keeps supported image bytes and metadata encrypted', async () => {

@@ -5,7 +5,7 @@ import * as Tooltip from '@radix-ui/react-tooltip'
 import { FilePlus2, FolderInput, Menu, PanelLeft, PanelLeftOpen, Upload, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { collectDirectory, collectDroppedItems } from './lib/files'
-import { cleanFileShareUrl, hasFileShareMarker, readFileShareUrl, ShareLinkError } from './lib/shareLink'
+import { cleanFileShareUrl, hasFileShareMarker, readFileShareUrl, ShareLinkError, type ShareLinkProgress } from './lib/shareLink'
 import { useWorkspace } from './store/useWorkspace'
 import type { EditorGroup } from './types'
 import { useImportWorkflow, type ImportItem, type ImportTarget } from './hooks/useImportWorkflow'
@@ -13,6 +13,7 @@ import { EditorPane } from './components/EditorPane'
 import { IconButton } from './components/IconButton'
 import { Sidebar } from './components/Sidebar'
 import { EditorDropZones, WorkspaceDndProvider } from './components/WorkspaceDnd'
+import { TransferStatus } from './components/TransferStatus'
 
 const SIDEBAR_COLLAPSE_THRESHOLD = 120
 const RESIZE_TARGET_SIZE = { coarse: 48, fine: 32 }
@@ -56,6 +57,7 @@ export default function App() {
   const narrow = useNarrow()
   const [sidebarAnimating, setSidebarAnimating] = useState(false)
   const [dragTarget, setDragTarget] = useState<'tree' | 'editor' | null>(null)
+  const [shareImportProgress, setShareImportProgress] = useState<ShareLinkProgress | null>(() => hasFileShareMarker() ? { phase: 'downloading' } : null)
   const { conflict, applyConflictToAll, setApplyConflictToAll, finishConflict, importItems } = useImportWorkflow()
 
   useEffect(() => {
@@ -69,9 +71,12 @@ export default function App() {
       if (!hasFileShareMarker()) return
       const href = location.href
       cleanFileShareUrl()
-      void readFileShareUrl(href).then((shared) => {
+      setShareImportProgress({ phase: 'downloading' })
+      void readFileShareUrl(href, setShareImportProgress).then((shared) => {
+        setShareImportProgress(null)
         return importItems([{ kind: 'decoded', ...shared, source: 'drop' }], 'primary')
       }).catch((error) => {
+        setShareImportProgress(null)
         if (!(error instanceof ShareLinkError)) { setNotice('sharedFileCorrupt'); return }
         const notices = {
           missing: 'sharedFileMissing',
@@ -189,7 +194,7 @@ export default function App() {
     void entries.then((dropped) => importItems(dropped.map((entry) => ({ kind: 'file' as const, ...entry })), target)).catch(() => setNotice('importFailed'))
   }
 
-  if (!hydrated) return <div className="loading"><div className="loading-mark">W</div></div>
+  if (!hydrated) return <div className="loading"><div className="loading-mark">W</div>{shareImportProgress && <TransferStatus className="loading-transfer-status" label={t(`sharePhase_${shareImportProgress.phase}`)} progress={shareImportProgress.progress} />}</div>
 
   const editorGroups = layout.groups as [EditorGroup, EditorGroup]
   const hasSecondary = Boolean(editorGroups[1].activeFileId)
@@ -228,6 +233,7 @@ export default function App() {
           {layout.sidebarOpen && <><button className="drawer-scrim" aria-label={t('close')} onClick={() => setSidebarOpen(false)} /><div className="sidebar-drawer"><Sidebar onImportFiles={() => void pickFiles()} onImportFolder={() => void pickFolder()} /></div></>}
         </>}
       </main>
+      {shareImportProgress && <TransferStatus className="global-transfer-status" label={t(`sharePhase_${shareImportProgress.phase}`)} progress={shareImportProgress.progress} />}
       {notice && <div className={`toast ${notice === 'copied' || notice === 'shareLinkCopied' ? 'success' : ''}`} role="alert"><span>{t(notice)}</span><button onClick={() => setNotice(null)}><X size={17} /><span className="sr-only">{t('dismiss')}</span></button></div>}
       <Dialog.Root open={Boolean(conflict)} onOpenChange={(open) => { if (!open && conflict) finishConflict('skip') }}>
         <Dialog.Portal>

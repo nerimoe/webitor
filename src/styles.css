@@ -281,7 +281,17 @@ button:focus-visible, [role="menuitem"]:focus-visible { outline: 2px solid var(-
 .dialog-check { min-height: 44px; display: flex; align-items: center; gap: 9px; font-size: 12px; }
 .dialog-check input { width: 17px; height: 17px; accent-color: var(--accent); }
 .dialog-actions { margin-top: 16px; display: flex; justify-content: flex-end; gap: 8px; }
-.loading { height: 100%; display: grid; place-items: center; background: var(--bg); }
+.dialog-actions button:disabled { opacity: .55; cursor: default; }
+.share-dialog .transfer-status { margin: 18px 0 4px; }
+.share-link-output { width: 100%; height: 46px; margin-top: 16px; padding: 0 11px; border: 1px solid var(--border); border-radius: 5px; outline: none; background: var(--surface-2); color: var(--text); font: 13px var(--font-code); }
+.share-link-output:focus { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent); }
+.transfer-status { min-height: 52px; padding: 10px 12px; display: grid; grid-template-columns: 24px minmax(0, 1fr); align-items: center; gap: 4px 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-2); color: var(--text); box-shadow: var(--shadow); font-size: 14px; font-weight: 600; }
+.transfer-status > svg { color: var(--accent-strong); }
+.transfer-progress { grid-column: 1 / -1; height: 3px; overflow: hidden; border-radius: 3px; background: var(--surface-3); }
+.transfer-progress span { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width 100ms linear; }
+.global-transfer-status { position: fixed; z-index: 250; top: max(14px, calc(env(safe-area-inset-top) + 10px)); left: 50%; width: min(360px, calc(100vw - 28px)); transform: translateX(-50%); backdrop-filter: blur(10px); }
+.loading { position: relative; height: 100%; display: grid; place-items: center; background: var(--bg); }
+.loading-transfer-status { position: absolute; top: max(14px, calc(env(safe-area-inset-top) + 10px)); left: 50%; width: min(360px, calc(100vw - 28px)); transform: translateX(-50%); }
 .loading-mark { color: var(--accent); font: 700 18px var(--font-code); animation: pulse 1s infinite; }
 .group-switch { height: 32px; display: flex; padding: 2px; border: 1px solid var(--border); background: var(--surface-2); border-radius: 5px; }
 .group-switch button { width: 34px; border: 0; background: transparent; border-radius: 3px; font-size: 13px; }
@@ -291,6 +301,8 @@ button:focus-visible, [role="menuitem"]:focus-visible { outline: 2px solid var(-
 .tree-scroll::-webkit-scrollbar-thumb, .code-editor .cm-scroller::-webkit-scrollbar-thumb, .markdown-preview::-webkit-scrollbar-thumb, .image-stage::-webkit-scrollbar-thumb, .timeline-list::-webkit-scrollbar-thumb, .timeline-preview::-webkit-scrollbar-thumb, .global-search-results::-webkit-scrollbar-thumb { border: 3px solid transparent; border-radius: 999px; background: var(--surface-3); background-clip: padding-box; }
 
 @keyframes pulse { 50% { opacity: .35; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin .8s linear infinite; }
 
 @media (max-width: 899px) {
   .app-shell { grid-template-rows: minmax(0, 1fr); padding-bottom: env(safe-area-inset-bottom); }
