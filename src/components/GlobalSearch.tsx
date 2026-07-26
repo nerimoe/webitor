@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import Fuse from 'fuse.js'
 import { FileImage, FileText, Search, X } from 'lucide-react'
@@ -36,6 +36,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean; onOpenChan
   const setSidebarOpen = useWorkspace((state) => state.setSidebarOpen)
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(0)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const records = useMemo(() => {
     const output: SearchRecord[] = []
@@ -85,11 +86,11 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean; onOpenChan
       <Dialog.Overlay className="dialog-overlay" />
       <Dialog.Content className="search-dialog" aria-describedby={undefined}>
         <Dialog.Title className="sr-only">{t('globalSearch')}</Dialog.Title>
-        <div className="global-search-input"><Search size={21} /><input autoFocus value={query} placeholder={t('searchDocuments')} onChange={(event) => { setQuery(event.target.value); setSelected(0) }} onKeyDown={(event) => {
+        <div className="global-search-input"><Search size={21} /><input ref={inputRef} autoFocus value={query} placeholder={t('searchDocuments')} onChange={(event) => { setQuery(event.target.value); setSelected(0) }} onKeyDown={(event) => {
           if (event.key === 'ArrowDown') { event.preventDefault(); setSelected((value) => Math.min(results.length - 1, value + 1)) }
           if (event.key === 'ArrowUp') { event.preventDefault(); setSelected((value) => Math.max(0, value - 1)) }
           if (event.key === 'Enter' && results[selected]) choose(results[selected])
-        }} /><Dialog.Close asChild><button aria-label={t('close')}><X size={20} /></button></Dialog.Close></div>
+        }} /><button aria-label={t('clearSearch')} disabled={!query} onClick={() => { setQuery(''); setSelected(0); inputRef.current?.focus() }}><X size={20} /></button></div>
         <div className="global-search-results">
           {results.length ? results.map((record, index) => <button key={record.id} className={index === selected ? 'selected' : ''} onPointerMove={() => setSelected(index)} onClick={() => choose(record)}>
             {record.image ? <FileImage size={20} /> : <FileText size={20} />}

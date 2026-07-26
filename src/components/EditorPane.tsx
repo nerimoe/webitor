@@ -3,7 +3,7 @@ import CodeMirror, { type ReactCodeMirrorRef } from '@uiw/react-codemirror'
 import { defaultKeymap, history, historyField, historyKeymap, indentWithTab, redo, undo } from '@codemirror/commands'
 import { closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete'
 import { bracketMatching, defaultHighlightStyle, foldGutter, foldKeymap, indentOnInput, syntaxHighlighting } from '@codemirror/language'
-import { highlightSelectionMatches, openSearchPanel, searchKeymap } from '@codemirror/search'
+import { highlightSelectionMatches, openSearchPanel, search, searchKeymap } from '@codemirror/search'
 import { EditorView, drawSelection, dropCursor, highlightActiveLine, keymap, lineNumbers } from '@codemirror/view'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Tooltip from '@radix-ui/react-tooltip'
@@ -107,7 +107,7 @@ export function EditorPane({ group, leading, onNewDocument, onImportFiles }: Edi
 
   const extensions = useMemo(() => [
     ...(showCodeGutters ? [lineNumbers(), foldGutter()] : []), history(), drawSelection(), dropCursor(), indentOnInput(), bracketMatching(), closeBrackets(),
-    highlightActiveLine(), highlightSelectionMatches(), syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+    highlightActiveLine(), highlightSelectionMatches(), search({ top: true }), syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
     keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...historyKeymap, ...foldKeymap, ...completionKeymap, indentWithTab]),
     EditorView.lineWrapping,
     EditorView.theme({ '&': { height: '100%' }, '.cm-scroller': { fontFamily: 'var(--font-code)', fontSize: 'var(--editor-font-size)' }, '.cm-content': { padding: '14px 0 40px' }, '.cm-gutters': { background: 'transparent', border: 'none' } }),

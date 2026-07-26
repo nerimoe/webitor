@@ -43,6 +43,35 @@ test('opens a file dropped on the editor', async ({ page }) => {
   await expect(page.locator('.cm-content')).toContainText('Dropped text')
 })
 
+test('offers split and single-view targets for external editor drops', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium')
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'current.txt', mimeType: 'text/plain', buffer: Buffer.from('Current') })
+  await page.getByTestId('sidebar').getByText('current.txt', { exact: true }).click()
+  const editor = page.locator('.editor-area')
+  const dropFile = async (name: string, target: string) => {
+    const transfer = await page.evaluateHandle((fileName) => {
+      const data = new DataTransfer()
+      data.items.add(new File([fileName], fileName, { type: 'text/plain' }))
+      return data
+    }, name)
+    await editor.dispatchEvent('dragenter', { dataTransfer: transfer })
+    await expect(page.locator('.external-editor-drop-zones')).toBeVisible()
+    await page.locator(target).dispatchEvent('drop', { dataTransfer: transfer })
+  }
+
+  await dropFile('left.txt', '.external-drop-left')
+  await expect(page.getByTestId('editor-primary')).toContainText('left.txt')
+  await expect(page.getByTestId('editor-secondary')).toContainText('current.txt')
+
+  await dropFile('right.txt', '.external-drop-right')
+  await expect(page.getByTestId('editor-primary')).toContainText('left.txt')
+  await expect(page.getByTestId('editor-secondary')).toContainText('right.txt')
+
+  await dropFile('single.txt', '.external-drop-single')
+  await expect(page.getByTestId('editor-primary')).toContainText('single.txt')
+  await expect(page.getByTestId('editor-secondary')).toHaveCount(0)
+})
+
 test('keeps undo history isolated between files', async ({ page }) => {
   await page.locator('input[type=file]').first().setInputFiles([
     { name: 'alpha.txt', mimeType: 'text/plain', buffer: Buffer.from('Alpha') },
@@ -282,6 +311,47 @@ test('searches across documents and opens the matching result', async ({ page },
   await expect(page.locator('.cm-content')).toContainText('Project Aurora decision')
 })
 
+test('clears global search with X and dismisses it with Escape', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name === 'ipad')
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'searchable.txt', mimeType: 'text/plain', buffer: Buffer.from('Needle') })
+  const sidebar = page.getByTestId('sidebar')
+  const searchButton = sidebar.getByRole('button', { name: /Search documents|搜索文档/ })
+  if (await searchButton.isVisible()) await searchButton.click()
+  else {
+    await sidebar.getByRole('button', { name: /More actions|更多操作/ }).click()
+    await page.getByRole('menuitem', { name: /Search documents|搜索文档/ }).click()
+  }
+  const input = page.getByPlaceholder(/Search names|搜索文件名/)
+  await input.fill('Needle')
+  await page.getByRole('button', { name: /Clear search|清空搜索/ }).click()
+  await expect(input).toHaveValue('')
+  await expect(page.locator('.search-dialog')).toBeVisible()
+  await page.locator('.dialog-overlay').click({ position: { x: 4, y: 4 } })
+  await expect(page.locator('.search-dialog')).toHaveCount(0)
+  if (await searchButton.isVisible()) await searchButton.click()
+  else {
+    await sidebar.getByRole('button', { name: /More actions|更多操作/ }).click()
+    await page.getByRole('menuitem', { name: /Search documents|搜索文档/ }).click()
+  }
+  await page.getByPlaceholder(/Search names|搜索文件名/).press('Escape')
+  await expect(page.locator('.search-dialog')).toHaveCount(0)
+})
+
+test('shows document find at the top of the editor', async ({ page }) => {
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'find.txt', mimeType: 'text/plain', buffer: Buffer.from('Find this text') })
+  if ((page.viewportSize()?.width ?? 1000) < 900) await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
+  await page.getByTestId('sidebar').getByText('find.txt', { exact: true }).click()
+  await page.locator('.cm-content').press('ControlOrMeta+f')
+  const editor = page.locator('.code-editor')
+  const panel = page.locator('.cm-panels-top .cm-search')
+  await expect(panel).toBeVisible()
+  const editorBox = await editor.boundingBox()
+  const panelBox = await panel.boundingBox()
+  expect(editorBox).not.toBeNull()
+  expect(panelBox).not.toBeNull()
+  expect(panelBox!.y - editorBox!.y).toBeLessThan(24)
+})
+
 test('opens global search by pulling past the top of the file list', async ({ page }) => {
   if ((page.viewportSize()?.width ?? 1000) < 900) await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
   const treeScroll = page.locator('.tree-scroll')
@@ -363,9 +433,12 @@ test('zooms an image around the midpoint of two touches', async ({ page }, testI
     await stage.dispatchEvent('pointermove', { ...point(-offset), pointerId: 1 })
     await stage.dispatchEvent('pointermove', { ...point(offset), pointerId: 2 })
   }
+  await expect(page.locator('.image-toolbar')).toContainText('100%')
+  await expect(page.locator('.image-stage img')).toHaveAttribute('style', /matrix/)
   await stage.dispatchEvent('pointerup', { ...point(-70), pointerId: 1 })
   await stage.dispatchEvent('pointerup', { ...point(70), pointerId: 2 })
   await expect(page.locator('.image-toolbar')).not.toContainText('100%')
+  await expect(page.locator('.image-stage img')).not.toHaveAttribute('style', /matrix/)
   const after = await stage.evaluate((element, anchor) => ({
     x: (element.scrollLeft + anchor.x) / element.scrollWidth,
     y: (element.scrollTop + anchor.y) / element.scrollHeight
@@ -394,6 +467,7 @@ test('uses the last pointer position for trackpad gesture zoom', async ({ page }
     const change = new Event('gesturechange', { bubbles: true, cancelable: true })
     Object.defineProperty(change, 'scale', { value: 1.2 })
     element.dispatchEvent(change)
+    element.dispatchEvent(new Event('gestureend', { bubbles: true, cancelable: true }))
   })
   await expect(page.locator('.image-toolbar')).toContainText('120%')
   const after = await imagePointAtPointer()

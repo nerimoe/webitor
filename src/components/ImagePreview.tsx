@@ -9,6 +9,7 @@ export function ImagePreview({ src, name }: { src: string; name: string }) {
   const [zoom, setZoom] = useState(100)
   const imageRef = useRef<HTMLImageElement>(null)
   const pendingAnchor = useRef<{ clientX: number; clientY: number; imageX: number; imageY: number } | null>(null)
+  const pinch = useRef<{ imageX: number; imageY: number; baseZoom: number; rect: DOMRect } | null>(null)
   const { ref: stageRef, elementRef: stageElementRef } = useLocalZoom<HTMLDivElement>(zoom, setZoom, {
     min: 25,
     max: 400,
@@ -24,6 +25,41 @@ export function ImagePreview({ src, name }: { src: string; name: string }) {
         imageX: imageRect.width ? (anchor.clientX - imageRect.left) / imageRect.width : 0.5,
         imageY: imageRect.height ? (anchor.clientY - imageRect.top) / imageRect.height : 0.5
       }
+      setZoom(nextZoom)
+    },
+    onPinchStart: (anchor) => {
+      const image = imageRef.current
+      if (!image) return
+      const rect = image.getBoundingClientRect()
+      pinch.current = {
+        imageX: rect.width ? (anchor.clientX - rect.left) / rect.width : 0.5,
+        imageY: rect.height ? (anchor.clientY - rect.top) / rect.height : 0.5,
+        baseZoom: zoom,
+        rect
+      }
+      image.style.transformOrigin = '0 0'
+      image.style.willChange = 'transform'
+    },
+    onPinchPreview: (nextZoom, anchor) => {
+      const image = imageRef.current
+      const session = pinch.current
+      if (!image || !session) return
+      const scale = nextZoom / session.baseZoom
+      const localX = session.imageX * session.rect.width
+      const localY = session.imageY * session.rect.height
+      const translateX = anchor.clientX - session.rect.left - localX * scale
+      const translateY = anchor.clientY - session.rect.top - localY * scale
+      image.style.transform = `matrix(${scale}, 0, 0, ${scale}, ${translateX}, ${translateY})`
+    },
+    onPinchEnd: (nextZoom, anchor) => {
+      const image = imageRef.current
+      const session = pinch.current
+      if (!image || !session) { setZoom(nextZoom); return }
+      pendingAnchor.current = { clientX: anchor.clientX, clientY: anchor.clientY, imageX: session.imageX, imageY: session.imageY }
+      pinch.current = null
+      image.style.transform = ''
+      image.style.transformOrigin = ''
+      image.style.willChange = ''
       setZoom(nextZoom)
     }
   })

@@ -14,6 +14,7 @@ import { EditorDropZones, WorkspaceDndProvider } from './components/WorkspaceDnd
 
 const SIDEBAR_COLLAPSE_THRESHOLD = 120
 const RESIZE_TARGET_SIZE = { coarse: 48, fine: 32 }
+type ImportTarget = false | 'active' | 'primary' | 'secondary' | 'single'
 
 const captureResizePointer = (event: React.PointerEvent<HTMLDivElement>) => {
   try { event.currentTarget.setPointerCapture(event.pointerId) } catch { /* Browser keeps document-level dragging as a fallback. */ }
@@ -124,7 +125,7 @@ export default function App() {
     setConflict({ name, resolve })
   }), [])
 
-  const importEntries = useCallback(async (entries: Array<{ file: File; path?: string[]; handle?: FileSystemFileHandle }>, open: boolean) => {
+  const importEntries = useCallback(async (entries: Array<{ file: File; path?: string[]; handle?: FileSystemFileHandle }>, target: ImportTarget) => {
     let first: string | null = null
     let rejected = false
     let batchChoice: 'overwrite' | 'copy' | 'skip' | null = null
@@ -151,9 +152,23 @@ export default function App() {
         first ??= fileId
       } catch { rejected = true }
     }
-    if (open && first) useWorkspace.getState().openFile(first, layout.activeMobileGroup)
+    if (target && first) {
+      const workspace = useWorkspace.getState()
+      if (target === 'single') {
+        workspace.closeSecondary()
+        useWorkspace.getState().openFile(first, 'primary')
+      } else if (target === 'primary') {
+        const groups = workspace.layout.groups
+        if (!groups[1].activeFileId && groups[0].activeFileId && groups[0].activeFileId !== first) {
+          workspace.openFile(groups[0].activeFileId, 'secondary')
+        }
+        useWorkspace.getState().openFile(first, 'primary')
+      } else {
+        workspace.openFile(first, target === 'secondary' ? 'secondary' : workspace.layout.activeMobileGroup)
+      }
+    }
     if (rejected) setNotice('unsupported')
-  }, [addFile, askConflict, ensureFolders, layout.activeMobileGroup, replaceImportedFile, setNotice])
+  }, [addFile, askConflict, ensureFolders, replaceImportedFile, setNotice])
 
   const finishConflict = (choice: 'overwrite' | 'copy' | 'skip') => {
     conflict?.resolve({ choice, applyAll: applyConflictToAll })
@@ -162,9 +177,9 @@ export default function App() {
 
   const createQuickDocument = () => addFile('untitled.txt', '')
 
-  const fromInput = (files: FileList | null, open = false) => {
+  const fromInput = (files: FileList | null, target: ImportTarget = false) => {
     if (!files) return
-    void importEntries(Array.from(files).map((file) => ({ file, path: (file as File & { webkitRelativePath?: string }).webkitRelativePath?.split('/').slice(0, -1).filter(Boolean) })), open)
+    void importEntries(Array.from(files).map((file) => ({ file, path: (file as File & { webkitRelativePath?: string }).webkitRelativePath?.split('/').slice(0, -1).filter(Boolean) })), target)
   }
   const pickFiles = async () => {
     if (window.showOpenFilePicker) {
@@ -185,7 +200,7 @@ export default function App() {
       } catch (error) { if (!(error instanceof DOMException && error.name === 'AbortError')) setNotice('importFailed') }
     } else folderInput.current?.click()
   }
-  const handleDrop = (event: React.DragEvent, open: boolean) => {
+  const handleDrop = (event: React.DragEvent, target: ImportTarget) => {
     if (!event.dataTransfer.items.length && !event.dataTransfer.files.length) return
     event.preventDefault()
     event.stopPropagation()
@@ -200,7 +215,7 @@ export default function App() {
     const entries = files.length && !containsDirectory
       ? Promise.resolve(files.map((file) => ({ file, path: [] })))
       : collectDroppedItems(items)
-    void entries.then((dropped) => importEntries(dropped, open)).catch(() => setNotice('importFailed'))
+    void entries.then((dropped) => importEntries(dropped, target)).catch(() => setNotice('importFailed'))
   }
 
   if (!hydrated) return <div className="loading"><div className="loading-mark">W</div></div>
@@ -223,14 +238,14 @@ export default function App() {
           </Panel>
           <Separator className={`resize-handle sidebar-resize ${layout.sidebarCollapsed ? 'collapsed' : ''}`} onPointerDown={beginSidebarResize} />
           <Panel id="editors" minSize="360px">
-            <EditorArea groups={editorGroups} hasSecondary={hasSecondary} splitRatio={layout.splitRatio} setSplitRatio={setSplitRatio} onDrop={(event) => handleDrop(event, true)} dragActive={dragTarget === 'editor'} setDragTarget={setDragTarget} onNewDocument={createQuickDocument} onImportFiles={() => void pickFiles()} leading={layout.sidebarCollapsed ? <IconButton icon={PanelLeftOpen} label={t('showSidebar')} onClick={() => animateSidebar('expand')} /> : undefined} />
+            <EditorArea groups={editorGroups} hasSecondary={hasSecondary} splitRatio={layout.splitRatio} setSplitRatio={setSplitRatio} onDrop={handleDrop} dragActive={dragTarget === 'editor'} setDragTarget={setDragTarget} onNewDocument={createQuickDocument} onImportFiles={() => void pickFiles()} leading={layout.sidebarCollapsed ? <IconButton icon={PanelLeftOpen} label={t('showSidebar')} onClick={() => animateSidebar('expand')} /> : undefined} />
           </Panel>
         </Group> : <>
           <div className={`mobile-editor ${dragTarget === 'editor' ? 'drag-active' : ''}`}
             onDragEnter={(event) => { if (event.dataTransfer.types.includes('Files')) setDragTarget('editor') }}
             onDragOver={(event) => event.preventDefault()}
             onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragTarget(null) }}
-            onDrop={(event) => handleDrop(event, true)}>
+            onDrop={(event) => handleDrop(event, 'active')}>
             <EditorPane group={editorGroups.find((group) => group.id === layout.activeMobileGroup) ?? editorGroups[0]} onNewDocument={createQuickDocument} onImportFiles={() => void pickFiles()} leading={<>
               <IconButton icon={layout.sidebarOpen ? X : Menu} label={t('files')} onClick={() => setSidebarOpen(!layout.sidebarOpen)} />
               {hasSecondary && <div className="group-switch" role="tablist" aria-label={t('editor')}>
@@ -265,7 +280,7 @@ function EditorArea({ groups, hasSecondary, splitRatio, setSplitRatio, onDrop, d
   hasSecondary: boolean
   splitRatio: number
   setSplitRatio: (ratio: number) => void
-  onDrop: (event: React.DragEvent) => void
+  onDrop: (event: React.DragEvent, target: ImportTarget) => void
   dragActive: boolean
   setDragTarget: (target: 'tree' | 'editor' | null) => void
   onNewDocument: () => void
@@ -273,13 +288,19 @@ function EditorArea({ groups, hasSecondary, splitRatio, setSplitRatio, onDrop, d
   leading?: ReactNode
 }) {
   const { t } = useTranslation()
-  return <div className={`editor-area ${dragActive ? 'drag-active' : ''}`} onDragEnter={(event) => { if (event.dataTransfer.types.includes('Files')) setDragTarget('editor') }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragTarget(null) }} onDrop={onDrop}>
+  const hasDocument = Boolean(groups[0].activeFileId || groups[1].activeFileId)
+  const dropTo = (event: React.DragEvent, target: ImportTarget) => onDrop(event, target)
+  return <div className={`editor-area ${dragActive ? 'drag-active' : ''}`} onDragEnter={(event) => { if (event.dataTransfer.types.includes('Files')) setDragTarget('editor') }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragTarget(null) }} onDrop={(event) => dropTo(event, hasDocument ? 'single' : 'active')}>
     {hasSecondary ? <Group orientation="horizontal" id="editor-layout" resizeTargetMinimumSize={RESIZE_TARGET_SIZE} onLayoutChanged={(value, meta) => { if (meta.isUserInteraction) setSplitRatio(value.primary ?? splitRatio) }}>
       <Panel id="primary" defaultSize={splitRatio} minSize="25%"><EditorPane group={groups[0]} leading={leading} onNewDocument={onNewDocument} onImportFiles={onImportFiles} /></Panel>
       <Separator className="resize-handle editor-resize" onPointerDown={captureResizePointer} />
       <Panel id="secondary" defaultSize={100 - splitRatio} minSize="25%"><EditorPane group={groups[1]} onNewDocument={onNewDocument} onImportFiles={onImportFiles} /></Panel>
     </Group> : <EditorPane group={groups[0]} leading={leading} onNewDocument={onNewDocument} onImportFiles={onImportFiles} />}
-    {dragActive && <div className="drop-overlay editor-drop"><Upload size={28} />{t('dropEditor')}</div>}
+    {dragActive && (hasDocument ? <div className="external-editor-drop-zones">
+      <div className="external-drop-left" onDragEnter={(event) => event.currentTarget.classList.add('active')} onDragLeave={(event) => event.currentTarget.classList.remove('active')} onDragOver={(event) => event.preventDefault()} onDrop={(event) => dropTo(event, 'primary')}>{t('openLeft')}</div>
+      <div className="external-drop-right" onDragEnter={(event) => event.currentTarget.classList.add('active')} onDragLeave={(event) => event.currentTarget.classList.remove('active')} onDragOver={(event) => event.preventDefault()} onDrop={(event) => dropTo(event, 'secondary')}>{t('openRightDrop')}</div>
+      <div className="external-drop-single" onDragEnter={(event) => event.currentTarget.classList.add('active')} onDragLeave={(event) => event.currentTarget.classList.remove('active')} onDragOver={(event) => event.preventDefault()} onDrop={(event) => dropTo(event, 'single')}><Upload size={22} />{t('dropOpenSingle')}</div>
+    </div> : <div className="drop-overlay editor-drop"><Upload size={28} />{t('dropEditor')}</div>)}
     <EditorDropZones />
   </div>
 }
