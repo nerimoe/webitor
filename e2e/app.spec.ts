@@ -356,6 +356,33 @@ test('zooms an image around the midpoint of two touches', async ({ page }, testI
   expect(Math.abs(after.y - before.y)).toBeLessThan(.04)
 })
 
+test('uses the last pointer position for trackpad gesture zoom', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium')
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64')
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'trackpad.png', mimeType: 'image/png', buffer: png })
+  await page.getByTestId('sidebar').getByText('trackpad.png', { exact: true }).click()
+  const stage = page.locator('.image-stage')
+  const box = await stage.boundingBox()
+  expect(box).not.toBeNull()
+  const pointer = { x: box!.x + box!.width * .74, y: box!.y + box!.height * .58 }
+  const imagePointAtPointer = () => page.locator('.image-stage img').evaluate((image, point) => {
+    const rect = image.getBoundingClientRect()
+    return { x: (point.x - rect.left) / rect.width, y: (point.y - rect.top) / rect.height }
+  }, pointer)
+  const before = await imagePointAtPointer()
+  await page.mouse.move(pointer.x, pointer.y)
+  await stage.evaluate((element) => {
+    element.dispatchEvent(new Event('gesturestart', { bubbles: true, cancelable: true }))
+    const change = new Event('gesturechange', { bubbles: true, cancelable: true })
+    Object.defineProperty(change, 'scale', { value: 1.2 })
+    element.dispatchEvent(change)
+  })
+  await expect(page.locator('.image-toolbar')).toContainText('120%')
+  const after = await imagePointAtPointer()
+  expect(Math.abs(after.x - before.x)).toBeLessThan(.015)
+  expect(Math.abs(after.y - before.y)).toBeLessThan(.015)
+})
+
 test('can pan to every side of a zoomed image', async ({ page }, testInfo) => {
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64')
   await page.locator('input[type=file]').first().setInputFiles({ name: 'large.png', mimeType: 'image/png', buffer: png })

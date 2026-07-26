@@ -36,20 +36,18 @@ export function ImagePreview({ src, name }: { src: string; name: string }) {
     })
   }
   useLayoutEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      const stage = stageRef.current
-      const image = imageRef.current
-      const anchor = pendingAnchor.current
-      pendingAnchor.current = null
-      if (!stage || !image || !anchor) { centerImage(); return }
-      const imageRect = image.getBoundingClientRect()
-      stage.scrollBy({
-        left: imageRect.left + imageRect.width * anchor.imageX - anchor.clientX,
-        top: imageRect.top + imageRect.height * anchor.imageY - anchor.clientY
-      })
+    const stage = stageRef.current
+    const image = imageRef.current
+    const anchor = pendingAnchor.current
+    pendingAnchor.current = null
+    if (!stage || !image || !anchor) { centerImage(); return }
+    const imageRect = image.getBoundingClientRect()
+    stage.scrollBy({
+      left: imageRect.left + imageRect.width * anchor.imageX - anchor.clientX,
+      top: imageRect.top + imageRect.height * anchor.imageY - anchor.clientY
     })
-    return () => cancelAnimationFrame(frame)
-  // The image canvas is resized by zoom before this effect runs.
+  // The image canvas has been resized before this layout effect runs, so the
+  // anchor correction happens before paint and never flashes a centered frame.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zoom])
   return <div className="image-preview" data-testid="image-preview">

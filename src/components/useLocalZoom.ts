@@ -9,6 +9,19 @@ interface Options {
 
 export interface ZoomAnchor { clientX: number; clientY: number }
 
+interface PointerMemory { position: ZoomAnchor | null; listening: boolean }
+
+const pointerWindow = window as Window & { __webitorPointerMemory?: PointerMemory }
+const pointerMemory = pointerWindow.__webitorPointerMemory ??= { position: null, listening: false }
+if (!pointerMemory.listening) {
+  const rememberPointer = (event: MouseEvent | PointerEvent) => {
+    pointerMemory.position = { clientX: event.clientX, clientY: event.clientY }
+  }
+  window.addEventListener('pointermove', rememberPointer, { passive: true })
+  window.addEventListener('mousemove', rememberPointer, { passive: true })
+  pointerMemory.listening = true
+}
+
 const clamp = (value: number, { min, max }: Options) => Math.max(min, Math.min(max, value))
 
 /** Handles trackpad pinch and iOS gesture events only inside the supplied surface. */
@@ -37,20 +50,25 @@ export function useLocalZoom<T extends HTMLElement>(value: number, setValue: (va
     const onWheel = (event: WheelEvent) => {
       if (!event.ctrlKey) return
       event.preventDefault()
-      update(valueRef.current - Math.sign(event.deltaY || 1) * options.step, { clientX: event.clientX, clientY: event.clientY })
+      const anchor = { clientX: event.clientX, clientY: event.clientY }
+      pointerMemory.position = anchor
+      update(valueRef.current - Math.sign(event.deltaY || 1) * options.step, anchor)
     }
     const onGestureStart = (event: Event) => {
       event.preventDefault()
+      if (pointerStart.current) return
       pinchStart.current = valueRef.current
     }
     const onGestureChange = (event: Event) => {
       event.preventDefault()
+      if (pointerStart.current) return
       const scale = (event as Event & { scale?: number }).scale ?? 1
       const gesture = event as Event & { clientX?: number; clientY?: number }
-      update((pinchStart.current ?? valueRef.current) * scale, {
-        clientX: gesture.clientX ?? elementCenter().clientX,
-        clientY: gesture.clientY ?? elementCenter().clientY
-      })
+      const hasCoordinates = typeof gesture.clientX === 'number' && typeof gesture.clientY === 'number' && (gesture.clientX !== 0 || gesture.clientY !== 0)
+      const anchor = hasCoordinates
+        ? { clientX: gesture.clientX!, clientY: gesture.clientY! }
+        : pointerMemory.position ?? elementCenter()
+      update((pinchStart.current ?? valueRef.current) * scale, anchor)
     }
     const distance = () => {
       const [first, second] = [...pointers.current.values()]
@@ -68,6 +86,7 @@ export function useLocalZoom<T extends HTMLElement>(value: number, setValue: (va
       if (pointers.current.size === 2) pointerStart.current = { distance: distance(), value: valueRef.current }
     }
     const onPointerMove = (event: PointerEvent) => {
+      pointerMemory.position = { clientX: event.clientX, clientY: event.clientY }
       if (!pointers.current.has(event.pointerId)) return
       pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
       const start = pointerStart.current
