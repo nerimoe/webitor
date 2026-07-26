@@ -83,7 +83,7 @@ test('reimports the same share link through the normal conflict flow', async ({ 
     await page.getByRole('button', { name: /More actions|更多操作/ }).click()
     await page.getByRole('menuitem', { name: /Create share link|创建分享链接/ }).click()
   }
-  await expect(page.getByRole('dialog')).toContainText(/encrypted share link|加密分享链接/i)
+  await expect(page.getByRole('dialog')).toContainText(/Create a share link|创建分享链接/i)
   expect(uploadRequests).toBe(0)
   await page.getByRole('button', { name: /^(Create link|创建链接)$/ }).click()
   await expect.poll(() => uploadRequests).toBe(1)
@@ -104,7 +104,7 @@ test('reimports the same share link through the normal conflict flow', async ({ 
     }
   })
   await page.goto(url!)
-  await expect(page.locator('.transfer-status')).toContainText(/Downloading encrypted file|正在下载加密文件/i)
+  await expect(page.locator('.transfer-status')).toContainText(/Opening shared file|正在打开分享文件/i)
   await expect(page.getByRole('dialog')).toContainText('shared-note.txt')
   await page.getByRole('button', { name: /Keep both|保留两份/ }).click()
   await expect(page.getByTestId('editor-primary').locator('.document-title')).toContainText('shared-note 2.txt')
