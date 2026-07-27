@@ -5,7 +5,9 @@ const SHARE_PARAM = 'share'
 const KEY_PARAM = 'key'
 const API_PATH = '/api/shares'
 const FILE_PAYLOAD_VERSION = 1
-const ENCRYPTED_PAYLOAD_VERSION = 1
+const LEGACY_ENCRYPTED_PAYLOAD_VERSION = 1
+const ENCRYPTED_PAYLOAD_VERSION = 2
+const ENCRYPTED_PAYLOAD_AAD = new TextEncoder().encode('webitor-share-v2')
 const SHARE_ID_BYTES = 12
 const AES_KEY_BYTES = 32
 const IV_BYTES = 12
@@ -231,7 +233,6 @@ export function cleanFileShareUrl() {
 export async function createFileShareUrl(input: ShareFileInput, baseUrl = location.href, onProgress?: ProgressHandler) {
   onProgress?.({ phase: 'compressing' })
   const payload = await encodeCompressedFile(input)
-  const id = bytesToBase64Url(randomBytes(SHARE_ID_BYTES))
   const keyBytes = randomBytes(AES_KEY_BYTES)
   const iv = randomBytes(IV_BYTES)
   const key = await importAesKey(keyBytes, 'encrypt')
@@ -239,7 +240,7 @@ export async function createFileShareUrl(input: ShareFileInput, baseUrl = locati
   const encrypted = new Uint8Array(await crypto.subtle.encrypt({
     name: 'AES-GCM',
     iv,
-    additionalData: new TextEncoder().encode(id),
+    additionalData: ENCRYPTED_PAYLOAD_AAD,
     tagLength: 128
   }, key, payload as BufferSource))
   const stored = new Uint8Array(1 + iv.byteLength + encrypted.byteLength)
@@ -247,13 +248,19 @@ export async function createFileShareUrl(input: ShareFileInput, baseUrl = locati
   stored.set(iv, 1)
   stored.set(encrypted, 1 + iv.byteLength)
   if (stored.byteLength > MAX_ENCRYPTED_BYTES) return fail('tooLarge', 'The encrypted file is too large to share')
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', stored as BufferSource))
+  const id = bytesToBase64Url(digest.subarray(0, SHARE_ID_BYTES))
+  const contentHash = bytesToBase64Url(digest)
 
   let response: Response
   try {
     onProgress?.({ phase: 'uploading' })
     response = await fetch(`${API_PATH}/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/octet-stream' },
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'X-Content-SHA256': contentHash
+      },
       body: stored
     })
   } catch { return fail('network', 'The encrypted share service is unavailable') }
@@ -309,7 +316,7 @@ export async function readFileShareUrl(href = location.href, onProgress?: Progre
   if (!response.ok) return fail('network', 'The encrypted share could not be downloaded')
   const stored = await readEncryptedResponse(response, onProgress)
   if (stored.byteLength > MAX_ENCRYPTED_BYTES) return fail('tooLarge', 'The encrypted share exceeds the size limit')
-  if (stored.byteLength <= 1 + IV_BYTES || stored[0] !== ENCRYPTED_PAYLOAD_VERSION) {
+  if (stored.byteLength <= 1 + IV_BYTES || (stored[0] !== ENCRYPTED_PAYLOAD_VERSION && stored[0] !== LEGACY_ENCRYPTED_PAYLOAD_VERSION)) {
     return fail('unsupportedVersion', 'The encrypted share version is not supported')
   }
   const iv = stored.subarray(1, 1 + IV_BYTES)
@@ -321,7 +328,7 @@ export async function readFileShareUrl(href = location.href, onProgress?: Progre
     plaintext = await crypto.subtle.decrypt({
       name: 'AES-GCM',
       iv,
-      additionalData: new TextEncoder().encode(id),
+      additionalData: stored[0] === LEGACY_ENCRYPTED_PAYLOAD_VERSION ? new TextEncoder().encode(id) : ENCRYPTED_PAYLOAD_AAD,
       tagLength: 128
     }, key, ciphertext as BufferSource)
   } catch { return fail('invalid', 'The encrypted share key or data is invalid') }

@@ -123,6 +123,22 @@ test('reimports the same share link through the normal conflict flow', async ({ 
   expect(uploadRequests).toBe(0)
   await page.getByRole('button', { name: /^(Create link|创建链接)$/ }).click()
   await expect.poll(() => uploadRequests).toBe(1)
+  const qrCode = page.getByRole('img', { name: /QR code for the share link|分享链接二维码/ })
+  await expect(qrCode).toBeVisible()
+  await expect.poll(() => qrCode.evaluate((canvas) => {
+    const context = (canvas as HTMLCanvasElement).getContext('2d')
+    if (!context) return false
+    const pixels = context.getImageData(0, 0, (canvas as HTMLCanvasElement).width, (canvas as HTMLCanvasElement).height).data
+    let hasDark = false
+    let hasLight = false
+    for (let index = 0; index < pixels.length; index += 4) {
+      const brightness = pixels[index] + pixels[index + 1] + pixels[index + 2]
+      if (pixels[index + 3] > 0 && brightness < 96) hasDark = true
+      if (pixels[index + 3] > 0 && brightness > 672) hasLight = true
+      if (hasDark && hasLight) return true
+    }
+    return false
+  })).toBe(true)
   await page.getByRole('button', { name: /^(Share link|分享链接)$/ }).click()
   await expect.poll(() => page.evaluate(() => (window as Window & { __sharedFileUrl?: string }).__sharedFileUrl)).toContain('?share=')
   const url = await page.evaluate(() => (window as Window & { __sharedFileUrl?: string }).__sharedFileUrl)

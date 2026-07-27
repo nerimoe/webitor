@@ -323,7 +323,9 @@ button:focus-visible, [role="menuitem"]:focus-visible { outline: 2px solid var(-
 .dialog-actions { margin-top: 16px; display: flex; justify-content: flex-end; gap: 8px; }
 .dialog-actions button:disabled { opacity: .55; cursor: default; }
 .share-dialog .transfer-status { margin: 18px 0 4px; }
-.share-link-output { width: 100%; height: 46px; margin-top: 16px; padding: 0 11px; border: 1px solid var(--border); border-radius: 5px; outline: none; background: var(--surface-2); color: var(--text); font: 13px var(--font-code); }
+.share-result { margin-top: 16px; display: grid; justify-items: center; gap: 14px; }
+.share-qr-code { width: 192px; height: 192px; max-width: 100%; border: 8px solid white; background: white; image-rendering: pixelated; }
+.share-link-output { width: 100%; height: 46px; padding: 0 11px; border: 1px solid var(--border); border-radius: 5px; outline: none; background: var(--surface-2); color: var(--text); font: 13px var(--font-code); }
 .share-link-output:focus { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent); }
 .transfer-status { min-height: 52px; padding: 10px 12px; display: grid; grid-template-columns: 24px minmax(0, 1fr); align-items: center; gap: 4px 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-2); color: var(--text); box-shadow: var(--shadow); font-size: 14px; font-weight: 600; }
 .transfer-status > svg { color: var(--accent-strong); }

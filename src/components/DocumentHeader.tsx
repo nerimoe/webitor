@@ -8,6 +8,7 @@ import { canShareBlob, contentMediaBlob, shareBlob, shareTextFile } from '../lib
 import { createFileShareUrl, shareOrCopyFileUrl, ShareLinkError, type ShareLinkProgress } from '../lib/shareLink'
 import { useWorkspace } from '../store/useWorkspace'
 import { IconButton } from './IconButton'
+import { ShareQrCode } from './ShareQrCode'
 import { TimelineDialog } from './TimelineDialog'
 import { TransferStatus } from './TransferStatus'
 import { useActionOverflow, type OverflowAction } from './useActionOverflow'
@@ -169,7 +170,10 @@ export function DocumentHeader({ fileId, leading, middle, viewActions = [], clos
           <Dialog.Title>{t(generatedShareUrl ? 'shareReadyTitle' : 'shareConfirmTitle')}</Dialog.Title>
           <Dialog.Description>{t(generatedShareUrl ? 'shareReadyBody' : 'shareConfirmBody')}</Dialog.Description>
           {shareProgress && <TransferStatus label={t(`sharePhase_${shareProgress.phase}`)} progress={shareProgress.progress} />}
-          {generatedShareUrl && <input className="share-link-output" aria-label={t('generatedShareLink')} readOnly value={generatedShareUrl} onFocus={(event) => event.currentTarget.select()} />}
+          {generatedShareUrl && <div className="share-result">
+            <ShareQrCode url={generatedShareUrl} label={t('shareQrCode')} />
+            <input className="share-link-output" aria-label={t('generatedShareLink')} readOnly value={generatedShareUrl} onFocus={(event) => event.currentTarget.select()} />
+          </div>}
           <div className="dialog-actions">
             <Dialog.Close asChild><button className="secondary-button" disabled={Boolean(shareProgress)}>{t(generatedShareUrl ? 'close' : 'cancel')}</button></Dialog.Close>
             <button className="primary-button" disabled={Boolean(shareProgress)} onClick={() => void (generatedShareUrl ? shareGeneratedLink() : createShareLink())}>{t(generatedShareUrl ? 'shareCreatedLink' : shareProgress ? 'creatingShareLink' : 'confirmCreateShareLink')}</button>

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createFileShareUrl, readFileShareUrl, ShareLinkError, shareOrCopyFileUrl, type ShareLinkProgress } from './shareLink'
 
 const storedShares = new Map<string, Uint8Array>()
+const uploadHeaders = new Map<string, Headers>()
 
 function shareId(input: RequestInfo | URL) {
   return String(input).split('/').at(-1) ?? ''
@@ -9,11 +10,13 @@ function shareId(input: RequestInfo | URL) {
 
 beforeEach(() => {
   storedShares.clear()
+  uploadHeaders.clear()
   vi.restoreAllMocks()
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const id = shareId(input)
     if (init?.method === 'PUT') {
       storedShares.set(id, new Uint8Array(init.body as ArrayBufferLike))
+      uploadHeaders.set(id, new Headers(init.headers))
       return new Response(null, { status: 201 })
     }
     const body = storedShares.get(id)
@@ -32,6 +35,13 @@ describe('encrypted file share links', () => {
     expect(url).toMatch(/^https:\/\/webitor\.example\/editor\?share=[A-Za-z0-9_-]{16}#key=[A-Za-z0-9_-]{43}$/)
     expect(url.length).toBeLessThan(150)
     expect(url).not.toContain('notes')
+    const id = new URL(url).searchParams.get('share')!
+    const stored = storedShares.get(id)!
+    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', stored as BufferSource))
+    const encodedDigest = btoa(String.fromCharCode(...digest)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+    expect(uploadHeaders.get(id)?.get('X-Content-SHA256')).toBe(encodedDigest)
+    expect(id).toBe(encodedDigest.slice(0, 16))
+    expect(stored[0]).toBe(2)
     expect(new TextDecoder().decode([...storedShares.values()][0])).not.toContain(text.slice(0, 20))
     expect(createProgress.map(({ phase }) => phase)).toEqual(['compressing', 'encrypting', 'uploading'])
     const readProgress: ShareLinkProgress[] = []
@@ -72,6 +82,32 @@ describe('encrypted file share links', () => {
     url.hash = `key=${key.startsWith('A') ? 'B' : 'A'}${key.slice(1)}`
 
     await expect(readFileShareUrl(url.toString())).rejects.toMatchObject({ code: 'invalid' } satisfies Partial<ShareLinkError>)
+  })
+
+  it('continues to read version 1 links', async () => {
+    const id = 'AAAAAAAAAAAAAAAA'
+    const keyBytes = crypto.getRandomValues(new Uint8Array(32))
+    const iv = crypto.getRandomValues(new Uint8Array(12))
+    const name = new TextEncoder().encode('legacy.txt')
+    const text = new TextEncoder().encode('Legacy content')
+    const payload = new Uint8Array(1 + 6 + name.length + text.length)
+    payload[1] = 1
+    new DataView(payload.buffer).setUint16(3, name.length)
+    payload.set(name, 7)
+    payload.set(text, 7 + name.length)
+    const key = await crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, false, ['encrypt'])
+    const encrypted = new Uint8Array(await crypto.subtle.encrypt({
+      name: 'AES-GCM', iv, additionalData: new TextEncoder().encode(id), tagLength: 128
+    }, key, payload))
+    const stored = new Uint8Array(1 + iv.length + encrypted.length)
+    stored[0] = 1
+    stored.set(iv, 1)
+    stored.set(encrypted, 1 + iv.length)
+    storedShares.set(id, stored)
+    const encodedKey = btoa(String.fromCharCode(...keyBytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+
+    await expect(readFileShareUrl(`https://webitor.example/?share=${id}#key=${encodedKey}`))
+      .resolves.toEqual({ name: 'legacy.txt', text: 'Legacy content' })
   })
 
   it.each([

@@ -49,6 +49,7 @@
     "idb": "latest",
     "libheif-js": "^1.19.8",
     "lucide-react": "latest",
+    "qrcode": "^1.5.4",
     "react": "latest",
     "react-dom": "latest",
     "react-i18next": "latest",
