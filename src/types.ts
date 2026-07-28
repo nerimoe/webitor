@@ -97,9 +97,19 @@ declare global {
     values(): AsyncIterableIterator<FileSystemFileHandle | FileSystemDirectoryHandle>
   }
 
+  interface LaunchParams {
+    readonly files: readonly FileSystemFileHandle[]
+    readonly targetURL: string
+  }
+
+  interface LaunchQueue {
+    setConsumer(consumer: (params: LaunchParams) => void): void
+  }
+
   interface Window {
     showOpenFilePicker?: (options?: Record<string, unknown>) => Promise<FileSystemFileHandle[]>
     showDirectoryPicker?: (options?: Record<string, unknown>) => Promise<FileSystemDirectoryHandle>
     showSaveFilePicker?: (options?: Record<string, unknown>) => Promise<FileSystemFileHandle>
+    launchQueue?: LaunchQueue
   }
 }

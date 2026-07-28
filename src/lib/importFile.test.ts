@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ImportFileError, readImportFile } from './importFile'
+import { ImportFileError, readImportFile, readImportHandle } from './importFile'
 
 describe('file import boundary', () => {
   it('classifies unsupported binary files separately', async () => {
@@ -17,6 +17,13 @@ describe('file import boundary', () => {
     const file = new File(['text'], 'note.txt', { type: 'text/plain' })
     vi.spyOn(file, 'text').mockRejectedValue(new DOMException('denied', 'NotAllowedError'))
     await expect(readImportFile(file)).rejects.toMatchObject({ code: 'permissionDenied' } satisfies Partial<ImportFileError>)
+  })
+
+  it('maps file-system handle permission failures to the same import contract', async () => {
+    const denied = new DOMException('denied', 'NotAllowedError')
+    const handle = { getFile: vi.fn().mockRejectedValue(denied) } as unknown as FileSystemFileHandle
+
+    await expect(readImportHandle(handle)).rejects.toMatchObject({ code: 'permissionDenied', source: denied } satisfies Partial<ImportFileError>)
   })
 
   it.each([

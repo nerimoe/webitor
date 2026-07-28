@@ -23,6 +23,26 @@ export default defineConfig({
         background_color: '#101316',
         display: 'standalone',
         start_url: '/',
+        file_handlers: [{
+          action: '/',
+          accept: {
+            'text/plain': ['.txt', '.text', '.log', '.csv', '.ini', '.cfg', '.conf', '.toml', '.properties', '.env', '.gitignore'],
+            'text/markdown': ['.md', '.markdown', '.mdown', '.mkd'],
+            'application/json': ['.json', '.jsonc'],
+            'application/xml': ['.xml'],
+            'text/yaml': ['.yaml', '.yml'],
+            'text/html': ['.html', '.htm'],
+            'text/css': ['.css'],
+            'text/javascript': ['.js', '.mjs', '.cjs', '.jsx'],
+            'text/typescript': ['.ts', '.mts', '.cts', '.tsx'],
+            'text/x-python': ['.py'],
+            'text/x-java-source': ['.java'],
+            'text/x-c': ['.c', '.h'],
+            'text/x-c++': ['.cc', '.cpp', '.cxx', '.hpp'],
+            'text/x-rust': ['.rs'],
+            'application/sql': ['.sql']
+          }
+        }],
         icons: [{ src: '/icons/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' }]
       },
       workbox: {

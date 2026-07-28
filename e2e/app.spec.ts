@@ -73,6 +73,39 @@ test('imports files through the browser fallback', async ({ page }) => {
   await expect(page.getByText('hello.ts')).toBeVisible()
 })
 
+test('opens a file delivered by the installed PWA file handler', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium')
+  await page.addInitScript(() => {
+    const target = window as Window & { deliverSystemFile?: (name: string, text: string) => void }
+    Object.defineProperty(window, 'launchQueue', {
+      configurable: true,
+      value: {
+        setConsumer(consumer: (params: LaunchParams) => void) {
+          target.deliverSystemFile = (name, text) => consumer({
+            files: [{
+              kind: 'file',
+              name,
+              getFile: async () => new File([text], name, { type: 'text/plain' })
+            } as FileSystemFileHandle],
+            targetURL: location.href
+          })
+        }
+      }
+    })
+  })
+  await page.reload()
+  await expect(page.getByTestId('no-file-state')).toBeVisible()
+
+  await page.evaluate(() => {
+    const deliver = (window as Window & { deliverSystemFile?: (name: string, text: string) => void }).deliverSystemFile
+    if (!deliver) throw new Error('The PWA did not register a file launch consumer')
+    deliver('system-opened.txt', 'Opened by the operating system')
+  })
+
+  await expect(page.getByTestId('editor-primary').locator('.document-title')).toContainText('system-opened.txt')
+  await expect(page.getByTestId('editor-primary').locator('.cm-content')).toContainText('Opened by the operating system')
+})
+
 test('uses the drawer layout at iPad portrait width', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'ipad')
   await expect(page.getByTestId('sidebar')).toBeHidden()

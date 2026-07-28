@@ -24,6 +24,14 @@ function readFailure(error: unknown): ImportFileFailure {
   return 'fileReadFailed'
 }
 
+export async function readImportHandle(handle: FileSystemFileHandle) {
+  try {
+    return await handle.getFile()
+  } catch (error) {
+    throw new ImportFileError(readFailure(error), error)
+  }
+}
+
 export async function readImportFile(file: File): Promise<ImportedFileData> {
   const provider = resolveImportFormat({ name: file.name, mimeType: file.type })
   const dataKind = provider?.dataKind ?? (isProbablyText(file) ? 'text' : null)

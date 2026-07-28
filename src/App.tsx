@@ -5,6 +5,8 @@ import * as Tooltip from '@radix-ui/react-tooltip'
 import { FilePlus2, FolderInput, Menu, PanelLeft, PanelLeftOpen, Upload, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { collectDirectory, collectDroppedItems } from './lib/files'
+import { subscribeToFileLaunch } from './lib/fileLaunch'
+import { ImportFileError, readImportHandle } from './lib/importFile'
 import { cleanFileShareUrl, hasFileShareMarker, readFileShareUrl, ShareLinkError, type ShareLinkProgress } from './lib/shareLink'
 import { useWorkspace } from './store/useWorkspace'
 import type { EditorGroup } from './types'
@@ -159,6 +161,28 @@ export default function App() {
 
   const createQuickDocument = () => addFile('untitled.txt', '')
 
+  const importHandles = useCallback(async (handles: readonly FileSystemFileHandle[], target: ImportTarget) => {
+    const items: ImportItem[] = []
+    let failure: ImportFileError | null = null
+    for (const handle of handles) {
+      try {
+        items.push({ kind: 'file', file: await readImportHandle(handle), handle })
+      } catch (error) {
+        if (!(error instanceof ImportFileError)) throw error
+        failure = error
+      }
+    }
+    if (items.length) await importItems(items, target)
+    if (failure) setNotice(failure.code)
+  }, [importItems, setNotice])
+
+  useEffect(() => {
+    if (!hydrated) return
+    return subscribeToFileLaunch((handles) => {
+      void importHandles(handles, 'fullscreen').catch(() => setNotice('importFailed'))
+    })
+  }, [hydrated, importHandles, setNotice])
+
   const fromInput = (files: FileList | null, target: ImportTarget = 'list') => {
     if (!files) return
     void importItems(Array.from(files).map((file): ImportItem => ({ kind: 'file', file, path: (file as File & { webkitRelativePath?: string }).webkitRelativePath?.split('/').slice(0, -1).filter(Boolean) })), target)
@@ -167,7 +191,7 @@ export default function App() {
     if (window.showOpenFilePicker) {
       try {
         const handles = await window.showOpenFilePicker({ multiple: true })
-        await importItems(await Promise.all(handles.map(async (handle): Promise<ImportItem> => ({ kind: 'file', file: await handle.getFile(), handle }))), 'list')
+        await importHandles(handles, 'list')
       } catch (error) { if (!(error instanceof DOMException && error.name === 'AbortError')) setNotice('importFailed') }
     } else fileInput.current?.click()
   }
