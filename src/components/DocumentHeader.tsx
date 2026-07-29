@@ -2,9 +2,10 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Tooltip from '@radix-ui/react-tooltip'
-import { Clock3, Download, FileText, Link2, MoreHorizontal, Save, SaveAll, Share2, X, type LucideIcon } from 'lucide-react'
+import { Clock3, Download, FileText, KeyRound, Link2, MoreHorizontal, Save, SaveAll, Share2, X, type LucideIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { canShareBlob, contentMediaBlob, shareBlob, shareTextFile } from '../lib/files'
+import { copyPickupCode, createPickupCode, type PickupProgress } from '../lib/pickupCode'
 import { createFileShareUrl, shareOrCopyFileUrl, ShareLinkError, type ShareLinkProgress } from '../lib/shareLink'
 import { useWorkspace } from '../store/useWorkspace'
 import { IconButton } from './IconButton'
@@ -80,6 +81,9 @@ export function DocumentHeader({ fileId, leading, middle, viewActions = [], clos
   const [shareDialogOpen, setShareDialogOpen] = useState(false)
   const [shareProgress, setShareProgress] = useState<ShareLinkProgress | null>(null)
   const [generatedShareUrl, setGeneratedShareUrl] = useState<string | null>(null)
+  const [pickupDialogOpen, setPickupDialogOpen] = useState(false)
+  const [pickupProgress, setPickupProgress] = useState<PickupProgress | null>(null)
+  const [generatedPickupCode, setGeneratedPickupCode] = useState<string | null>(null)
   const titleInput = useRef<HTMLInputElement>(null)
   const binary = Boolean(content && content.contentKind !== 'text')
   const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
@@ -127,6 +131,32 @@ export function DocumentHeader({ fileId, leading, middle, viewActions = [], clos
       setGeneratedShareUrl(null)
     } catch { setNotice('shareLinkFailed') }
   }
+  const createFilePickupCode = async () => {
+    if (!content || pickupProgress) return
+    const name = node?.name ?? (binary ? 'file' : 'document.txt')
+    try {
+      const created = await createPickupCode(
+        { name, text: content.text, mediaBlob: content.mediaBlob, dataUrl: content.dataUrl, mimeType: content.mimeType, contentKind: content.contentKind },
+        setPickupProgress
+      )
+      setGeneratedPickupCode(created.code)
+    } catch (error) {
+      if (error instanceof ShareLinkError && error.code === 'tooLarge') setNotice('pickupTooLarge')
+      else if (error instanceof ShareLinkError && error.code === 'rateLimited') setNotice('pickupRateLimited')
+      else setNotice('pickupCreateFailed')
+    } finally {
+      setPickupProgress(null)
+    }
+  }
+  const copyGeneratedPickupCode = async () => {
+    if (!generatedPickupCode) return
+    try {
+      await copyPickupCode(generatedPickupCode)
+      setNotice('pickupCodeCopied')
+      setPickupDialogOpen(false)
+      setGeneratedPickupCode(null)
+    } catch { setNotice('pickupCreateFailed') }
+  }
 
   const documentActions = useMemo<HeaderAction[]>(() => {
     if (!fileId || !content) return []
@@ -139,6 +169,7 @@ export function DocumentHeader({ fileId, leading, middle, viewActions = [], clos
       if (window.showSaveFilePicker) next.push({ id: 'save-as', priority: 7, label: t('saveAs'), icon: SaveAll, onClick: () => void saveFile(fileId, true) })
     }
     if (iOS || canShareBlob(blob, name)) next.push({ id: 'share', priority: iOS ? 0 : 2, label: t('share'), icon: Share2, onClick: share })
+    next.push({ id: 'pickup-code', priority: 4, label: t('createPickupCode'), icon: KeyRound, onClick: () => setPickupDialogOpen(true) })
     next.push({ id: 'share-link', priority: 5, label: t('createShareLink'), icon: Link2, onClick: () => setShareDialogOpen(true) })
     if (content.contentKind === 'text') next.push({ id: 'timeline', priority: 6, label: t('timeline'), icon: Clock3, onClick: () => setTimelineOpen(true) })
     return next
@@ -177,6 +208,25 @@ export function DocumentHeader({ fileId, leading, middle, viewActions = [], clos
           <div className="dialog-actions">
             <Dialog.Close asChild><button className="secondary-button" disabled={Boolean(shareProgress)}>{t(generatedShareUrl ? 'close' : 'cancel')}</button></Dialog.Close>
             <button className="primary-button" disabled={Boolean(shareProgress)} onClick={() => void (generatedShareUrl ? shareGeneratedLink() : createShareLink())}>{t(generatedShareUrl ? 'shareCreatedLink' : shareProgress ? 'creatingShareLink' : 'confirmCreateShareLink')}</button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+    <Dialog.Root open={pickupDialogOpen} onOpenChange={(open) => {
+      if (pickupProgress) return
+      setPickupDialogOpen(open)
+      if (!open) setGeneratedPickupCode(null)
+    }}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="dialog-overlay" />
+        <Dialog.Content className="dialog-content pickup-dialog" onEscapeKeyDown={(event) => { if (pickupProgress) event.preventDefault() }} onPointerDownOutside={(event) => { if (pickupProgress) event.preventDefault() }}>
+          <Dialog.Title>{t(generatedPickupCode ? 'pickupReadyTitle' : 'pickupConfirmTitle')}</Dialog.Title>
+          <Dialog.Description>{t(generatedPickupCode ? 'pickupReadyBody' : 'pickupConfirmBody')}</Dialog.Description>
+          {pickupProgress && <TransferStatus label={t(`pickupPhase_${pickupProgress.phase}`)} progress={pickupProgress.progress} />}
+          {generatedPickupCode && <output className="pickup-code-output" aria-label={t('pickupCode')}>{generatedPickupCode}</output>}
+          <div className="dialog-actions">
+            <Dialog.Close asChild><button className="secondary-button" disabled={Boolean(pickupProgress)}>{t(generatedPickupCode ? 'close' : 'cancel')}</button></Dialog.Close>
+            <button className="primary-button" disabled={Boolean(pickupProgress)} onClick={() => void (generatedPickupCode ? copyGeneratedPickupCode() : createFilePickupCode())}>{t(generatedPickupCode ? 'copyPickupCode' : pickupProgress ? 'creatingPickupCode' : 'confirmCreatePickupCode')}</button>
           </div>
         </Dialog.Content>
       </Dialog.Portal>

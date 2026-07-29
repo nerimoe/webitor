@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Download, FilePlus2, FolderInput, FolderPlus, MoreHorizontal, PanelLeftClose, Search, Share2, Upload } from 'lucide-react'
+import { Download, FilePlus2, FolderInput, FolderPlus, MoreHorizontal, PackageOpen, PanelLeftClose, Search, Share2, Upload } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { canShareWorkspace, shareWorkspace, workspaceZip } from '../lib/files'
 import { useWorkspace } from '../store/useWorkspace'
@@ -12,9 +12,10 @@ import { useActionOverflow } from './useActionOverflow'
 
 const PULL_SEARCH_THRESHOLD = 72
 
-export function Sidebar({ onImportFiles, onImportFolder, onCollapse, allowSplit = true }: {
+export function Sidebar({ onImportFiles, onImportFolder, onReceivePickup, onCollapse, allowSplit = true }: {
   onImportFiles: () => void
   onImportFolder: () => void
+  onReceivePickup: () => void
   onCollapse?: () => void
   allowSplit?: boolean
 }) {
@@ -33,9 +34,9 @@ export function Sidebar({ onImportFiles, onImportFolder, onCollapse, allowSplit 
   const [pulling, setPulling] = useState(false)
   const { ref: actionsRef, visible, overflow } = useActionOverflow([
     ...(onCollapse ? [{ id: 'collapse', priority: 0 }] : []),
-    { id: 'new', priority: 1 }, { id: 'folder', priority: 2 }, { id: 'search', priority: 3 }, { id: 'settings', priority: 4 },
-    { id: 'import-files', priority: 5 }, { id: 'import-folder', priority: 6 }, { id: 'export', priority: 7 },
-    ...(shareSupported ? [{ id: 'share', priority: 8 }] : [])
+    { id: 'new', priority: 1 }, { id: 'folder', priority: 2 }, { id: 'search', priority: 3 }, { id: 'pickup', priority: 4 }, { id: 'settings', priority: 5 },
+    { id: 'import-files', priority: 6 }, { id: 'import-folder', priority: 7 }, { id: 'export', priority: 8 },
+    ...(shareSupported ? [{ id: 'share', priority: 9 }] : [])
   ])
   const visibleIds = new Set(visible.map((item) => item.id))
   const createFile = () => {
@@ -108,6 +109,7 @@ export function Sidebar({ onImportFiles, onImportFolder, onCollapse, allowSplit 
           {visibleIds.has('new') && <IconButton icon={FilePlus2} label={t('newFile')} onClick={createFile} />}
           {visibleIds.has('folder') && <IconButton icon={FolderPlus} label={t('newFolder')} onClick={createFolder} />}
           {visibleIds.has('search') && <IconButton icon={Search} label={t('globalSearch')} onClick={() => setSearchOpen(true)} />}
+          {visibleIds.has('pickup') && <IconButton icon={PackageOpen} label={t('receivePickupTitle')} onClick={onReceivePickup} />}
           {visibleIds.has('settings') && <SettingsMenu />}
           {visibleIds.has('import-files') && <IconButton icon={Upload} label={t('importFiles')} onClick={onImportFiles} />}
           {visibleIds.has('import-folder') && <IconButton icon={FolderInput} label={t('importFolder')} onClick={onImportFolder} />}
@@ -120,6 +122,7 @@ export function Sidebar({ onImportFiles, onImportFolder, onCollapse, allowSplit 
               {overflow.some((item) => item.id === 'new') && <DropdownMenu.Item className="menu-item with-icon" onSelect={createFile}><FilePlus2 size={18} />{t('newFile')}</DropdownMenu.Item>}
               {overflow.some((item) => item.id === 'folder') && <DropdownMenu.Item className="menu-item with-icon" onSelect={createFolder}><FolderPlus size={18} />{t('newFolder')}</DropdownMenu.Item>}
               {overflow.some((item) => item.id === 'search') && <DropdownMenu.Item className="menu-item with-icon" onSelect={() => setSearchOpen(true)}><Search size={18} />{t('globalSearch')}</DropdownMenu.Item>}
+              {overflow.some((item) => item.id === 'pickup') && <DropdownMenu.Item className="menu-item with-icon" onSelect={onReceivePickup}><PackageOpen size={18} />{t('receivePickupTitle')}</DropdownMenu.Item>}
               {overflow.some((item) => item.id === 'settings') && <SettingsMenu asSubmenu />}
               {overflow.some((item) => item.id === 'import-files') && <DropdownMenu.Item className="menu-item with-icon" onSelect={onImportFiles}><Upload size={18} />{t('importFiles')}</DropdownMenu.Item>}
               {overflow.some((item) => item.id === 'import-folder') && <DropdownMenu.Item className="menu-item with-icon" onSelect={onImportFolder}><FolderInput size={18} />{t('importFolder')}</DropdownMenu.Item>}

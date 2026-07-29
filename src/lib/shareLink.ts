@@ -12,9 +12,9 @@ const SHARE_ID_BYTES = 12
 const AES_KEY_BYTES = 32
 const IV_BYTES = 12
 const MAX_FILE_BYTES = 8 * 1024 * 1024
-const MAX_ENCRYPTED_BYTES = 2 * 1024 * 1024
+export const MAX_TRANSFER_BYTES = 2 * 1024 * 1024
 
-interface ShareFileInput {
+export interface ShareFileInput {
   name: string
   text: string
   mediaBlob?: Blob
@@ -175,7 +175,7 @@ function decodeFilePayload(bytes: Uint8Array): SharedFile {
   return { name, text: '', mediaBlob: new Blob([body as BlobPart], { type: media.mimeType }), mimeType: media.mimeType, contentKind: media.contentKind }
 }
 
-async function encodeCompressedFile(input: ShareFileInput) {
+export async function encodeCompressedFile(input: ShareFileInput) {
   const source = await encodeFilePayload(input)
   if (typeof CompressionStream !== 'function') {
     const output = new Uint8Array(1 + source.byteLength)
@@ -191,7 +191,7 @@ async function encodeCompressedFile(input: ShareFileInput) {
   return output
 }
 
-async function decodeCompressedFile(bytes: Uint8Array) {
+export async function decodeCompressedFile(bytes: Uint8Array) {
   if (!bytes.byteLength) return fail('invalid', 'The shared file is empty')
   if (bytes[0] === 0) return decodeFilePayload(bytes.subarray(1))
   if (bytes[0] !== 1) return fail('unsupportedCompression', 'The shared file compression is not supported')
@@ -247,7 +247,7 @@ export async function createFileShareUrl(input: ShareFileInput, baseUrl = locati
   stored[0] = ENCRYPTED_PAYLOAD_VERSION
   stored.set(iv, 1)
   stored.set(encrypted, 1 + iv.byteLength)
-  if (stored.byteLength > MAX_ENCRYPTED_BYTES) return fail('tooLarge', 'The encrypted file is too large to share')
+  if (stored.byteLength > MAX_TRANSFER_BYTES) return fail('tooLarge', 'The encrypted file is too large to share')
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', stored as BufferSource))
   const id = bytesToBase64Url(digest.subarray(0, SHARE_ID_BYTES))
   const contentHash = bytesToBase64Url(digest)
@@ -276,7 +276,7 @@ export async function createFileShareUrl(input: ShareFileInput, baseUrl = locati
 
 async function readEncryptedResponse(response: Response, onProgress?: ProgressHandler) {
   const declaredLength = Number(response.headers.get('Content-Length') ?? 0)
-  if (declaredLength > MAX_ENCRYPTED_BYTES) return fail('tooLarge', 'The encrypted share exceeds the size limit')
+  if (declaredLength > MAX_TRANSFER_BYTES) return fail('tooLarge', 'The encrypted share exceeds the size limit')
   onProgress?.({ phase: 'downloading', progress: declaredLength > 0 ? 0 : undefined })
   if (!response.body) return new Uint8Array(await response.arrayBuffer())
 
@@ -287,7 +287,7 @@ async function readEncryptedResponse(response: Response, onProgress?: ProgressHa
     const { done, value } = await reader.read()
     if (done) break
     size += value.byteLength
-    if (size > MAX_ENCRYPTED_BYTES) {
+    if (size > MAX_TRANSFER_BYTES) {
       await reader.cancel()
       return fail('tooLarge', 'The encrypted share exceeds the size limit')
     }
@@ -315,7 +315,7 @@ export async function readFileShareUrl(href = location.href, onProgress?: Progre
   if (response.status === 410) return fail('expired', 'The encrypted share has expired')
   if (!response.ok) return fail('network', 'The encrypted share could not be downloaded')
   const stored = await readEncryptedResponse(response, onProgress)
-  if (stored.byteLength > MAX_ENCRYPTED_BYTES) return fail('tooLarge', 'The encrypted share exceeds the size limit')
+  if (stored.byteLength > MAX_TRANSFER_BYTES) return fail('tooLarge', 'The encrypted share exceeds the size limit')
   if (stored.byteLength <= 1 + IV_BYTES || (stored[0] !== ENCRYPTED_PAYLOAD_VERSION && stored[0] !== LEGACY_ENCRYPTED_PAYLOAD_VERSION)) {
     return fail('unsupportedVersion', 'The encrypted share version is not supported')
   }

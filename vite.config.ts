@@ -13,6 +13,9 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
       registerType: 'autoUpdate',
       includeAssets: ['icons/icon.svg'],
       manifest: {
@@ -43,10 +46,20 @@ export default defineConfig({
             'application/sql': ['.sql']
           }
         }],
+        share_target: {
+          action: '/share-target',
+          method: 'POST',
+          enctype: 'multipart/form-data',
+          params: {
+            files: [{
+              name: 'files',
+              accept: ['text/*', 'application/json', 'application/xml', 'application/sql', 'image/*', 'video/*', 'application/octet-stream']
+            }]
+          }
+        },
         icons: [{ src: '/icons/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' }]
       },
-      workbox: {
-        navigateFallback: '/index.html',
+      injectManifest: {
         globPatterns: ['**/*.{js,css,html,svg,woff2}'],
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024
       }

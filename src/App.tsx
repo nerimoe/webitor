@@ -8,6 +8,7 @@ import { collectDirectory, collectDroppedItems } from './lib/files'
 import { subscribeToFileLaunch } from './lib/fileLaunch'
 import { ImportFileError, readImportHandle } from './lib/importFile'
 import { cleanFileShareUrl, hasFileShareMarker, readFileShareUrl, ShareLinkError, type ShareLinkProgress } from './lib/shareLink'
+import { cleanShareTargetUrl, hasShareTargetMarker, readShareTargetFiles } from './lib/shareTarget'
 import { useWorkspace } from './store/useWorkspace'
 import type { EditorGroup } from './types'
 import { useImportWorkflow, type ImportItem, type ImportTarget } from './hooks/useImportWorkflow'
@@ -15,6 +16,7 @@ import { EditorPane } from './components/EditorPane'
 import { DocumentHeader } from './components/DocumentHeader'
 import { DocumentStatusBar } from './components/DocumentStatusBar'
 import { IconButton } from './components/IconButton'
+import { PickupReceiveDialog } from './components/PickupReceiveDialog'
 import { Sidebar } from './components/Sidebar'
 import { EditorDropZones, WorkspaceDndProvider } from './components/WorkspaceDnd'
 import { TransferStatus } from './components/TransferStatus'
@@ -64,6 +66,8 @@ export default function App() {
   const [sidebarAnimating, setSidebarAnimating] = useState(false)
   const [dragTarget, setDragTarget] = useState<'tree' | 'editor' | null>(null)
   const [shareImportProgress, setShareImportProgress] = useState<ShareLinkProgress | null>(() => hasFileShareMarker() ? { phase: 'downloading' } : null)
+  const [shareTargetImporting, setShareTargetImporting] = useState(() => hasShareTargetMarker())
+  const [pickupDialogOpen, setPickupDialogOpen] = useState(false)
   const { conflict, applyConflictToAll, setApplyConflictToAll, finishConflict, importItems } = useImportWorkflow()
 
   useEffect(() => {
@@ -106,6 +110,16 @@ export default function App() {
       window.removeEventListener('hashchange', importSharedFile)
       window.removeEventListener('popstate', importSharedFile)
     }
+  }, [hydrated, importItems, setNotice])
+  useEffect(() => {
+    if (!hydrated || !hasShareTargetMarker()) return
+    const href = location.href
+    setShareTargetImporting(true)
+    void readShareTargetFiles(href).then(async ({ files, cleanup }) => {
+      await importItems(files.map((file): ImportItem => ({ kind: 'file', file })), 'fullscreen')
+      cleanShareTargetUrl()
+      void cleanup().catch((error) => console.error('Shared file cache cleanup failed:', error))
+    }).catch(() => setNotice('shareTargetFailed')).finally(() => setShareTargetImporting(false))
   }, [hydrated, importItems, setNotice])
   useEffect(() => { void i18n.changeLanguage(settings.locale) }, [i18n, settings.locale])
   useEffect(() => {
@@ -225,7 +239,7 @@ export default function App() {
     void entries.then((dropped) => importItems(dropped.map((entry) => ({ kind: 'file' as const, ...entry })), target)).catch(() => setNotice('importFailed'))
   }
 
-  if (!hydrated) return <div className="loading"><div className="loading-mark">W</div>{shareImportProgress && <TransferStatus className="loading-transfer-status" label={t(`sharePhase_${shareImportProgress.phase}`)} progress={shareImportProgress.progress} />}</div>
+  if (!hydrated) return <div className="loading"><div className="loading-mark">W</div>{shareImportProgress && <TransferStatus className="loading-transfer-status" label={t(`sharePhase_${shareImportProgress.phase}`)} progress={shareImportProgress.progress} />}{shareTargetImporting && <TransferStatus className="loading-transfer-status" label={t('receivingSharedFiles')} />}</div>
 
   const editorGroups = layout.groups as [EditorGroup, EditorGroup]
   const hasSecondary = Boolean(editorGroups[1].activeFileId)
@@ -239,7 +253,7 @@ export default function App() {
             if (!collapsed) setSidebarWidth(size.inPixels)
           }}>
             <div className={`drop-region sidebar-region ${dragTarget === 'tree' ? 'drag-active' : ''}`} onDragEnter={(e) => { if (e.dataTransfer.types.includes('Files')) setDragTarget('tree') }} onDragOver={(e) => e.preventDefault()} onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragTarget(null) }} onDrop={(e) => handleDrop(e, 'list')}>
-              <Sidebar onImportFiles={() => void pickFiles()} onImportFolder={() => void pickFolder()} onCollapse={() => animateSidebar('collapse')} />
+              <Sidebar onImportFiles={() => void pickFiles()} onImportFolder={() => void pickFolder()} onReceivePickup={() => setPickupDialogOpen(true)} onCollapse={() => animateSidebar('collapse')} />
               {dragTarget === 'tree' && <div className="drop-overlay"><PanelLeft size={26} />{t('dropTree')}</div>}
             </div>
           </Panel>
@@ -258,10 +272,11 @@ export default function App() {
             </>} />
             {dragTarget === 'editor' && <div className="drop-overlay editor-drop"><Upload size={28} />{t('dropEditor')}</div>}
           </div>
-          {layout.sidebarOpen && <><button className="drawer-scrim" aria-label={t('close')} onClick={() => setSidebarOpen(false)} /><div className="sidebar-drawer"><Sidebar allowSplit={false} onImportFiles={() => void pickFiles()} onImportFolder={() => void pickFolder()} /></div></>}
+          {layout.sidebarOpen && <><button className="drawer-scrim" aria-label={t('close')} onClick={() => setSidebarOpen(false)} /><div className="sidebar-drawer"><Sidebar allowSplit={false} onImportFiles={() => void pickFiles()} onImportFolder={() => void pickFolder()} onReceivePickup={() => { setPickupDialogOpen(true); setSidebarOpen(false) }} /></div></>}
         </>}
       </main>
       {shareImportProgress && <TransferStatus className="global-transfer-status" label={t(`sharePhase_${shareImportProgress.phase}`)} progress={shareImportProgress.progress} />}
+      {shareTargetImporting && <TransferStatus className="global-transfer-status" label={t('receivingSharedFiles')} />}
       {notice && <div className={`toast ${notice === 'copied' || notice === 'shareLinkCopied' ? 'success' : ''}`} role="alert">
         <span>{t(notice)}</span>
         {canRetryHydration && <button className="toast-retry" onClick={() => void hydrate()}>{t('retry')}</button>}
@@ -278,6 +293,7 @@ export default function App() {
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
+      <PickupReceiveDialog open={pickupDialogOpen} onOpenChange={setPickupDialogOpen} onReceive={(shared) => importItems([{ kind: 'decoded', ...shared, source: 'drop' }], 'fullscreen')} />
       <input ref={fileInput} type="file" multiple hidden onChange={(event) => { fromInput(event.target.files); event.target.value = '' }} />
       <input ref={folderInput} type="file" multiple hidden onChange={(event) => { fromInput(event.target.files); event.target.value = '' }} />
     </div>

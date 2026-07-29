@@ -106,11 +106,115 @@ test('opens a file delivered by the installed PWA file handler', async ({ page }
   await expect(page.getByTestId('editor-primary').locator('.cm-content')).toContainText('Opened by the operating system')
 })
 
+test('imports a file received through the Android share target', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium')
+  await page.evaluate(() => navigator.serviceWorker.ready)
+  await page.reload()
+  await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true)
+
+  const targetUrl = await page.evaluate(async () => {
+    const form = new FormData()
+    form.append('files', new File(['Shared from Android'], 'android-share.txt', { type: 'text/plain', lastModified: 1234 }))
+    const response = await fetch('/share-target', { method: 'POST', body: form })
+    return response.url
+  })
+  const handoff = new URL(targetUrl)
+  const token = handoff.searchParams.get('share-target')
+  expect(token).toMatch(/^[a-f0-9]{32}$/)
+
+  await page.goto(targetUrl)
+
+  await expect(page.getByTestId('editor-primary').locator('.document-title')).toContainText('android-share.txt')
+  await expect(page.getByTestId('editor-primary').locator('.cm-content')).toContainText('Shared from Android')
+  await expect.poll(() => page.url()).not.toContain('share-target')
+  await expect.poll(() => page.evaluate(async ({ token }) => (await fetch(`/__share-target/${token}/0`)).status, { token })).toBe(404)
+})
+
+test('sends and receives a file once with a pickup code', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium')
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'pickup-note.txt', mimeType: 'text/plain', buffer: Buffer.from('One-time pickup content') })
+  await page.getByTestId('sidebar').getByText('pickup-note.txt', { exact: true }).click()
+
+  const createPickup = page.getByRole('button', { name: /Create pickup code|创建取件码/ })
+  if (await createPickup.isVisible()) await createPickup.click()
+  else {
+    await page.locator('.document-bar').getByRole('button', { name: /More actions|更多操作/ }).click()
+    await page.getByRole('menuitem', { name: /Create pickup code|创建取件码/ }).click()
+  }
+  await page.getByRole('button', { name: /^(Create code|创建取件码)$/ }).click()
+  const codeOutput = page.getByRole('status', { name: /Pickup code|取件码/ })
+  await expect(codeOutput).toHaveText(/^\d{6}$/)
+  const code = await codeOutput.textContent()
+  await page.getByRole('button', { name: /^(Close|关闭)$/ }).click()
+
+  const openReceiveDialog = async () => {
+    const receivePickup = page.getByTestId('sidebar').getByRole('button', { name: /Receive with pickup code|输入取件码收件/ })
+    if (await receivePickup.isVisible()) await receivePickup.click()
+    else {
+      await page.getByTestId('sidebar').getByRole('button', { name: /More actions|更多操作/ }).click()
+      await page.getByRole('menuitem', { name: /Receive with pickup code|输入取件码收件/ }).click()
+    }
+  }
+
+  await openReceiveDialog()
+  const receiveDialog = page.getByRole('dialog', { name: /Receive with pickup code|输入取件码收件/ })
+  await receiveDialog.getByLabel(/Pickup code|取件码/).fill(code!)
+  await page.getByRole('button', { name: /Receive file|接收文件/ }).click()
+  await expect(page.getByRole('dialog', { name: /A file already exists|文件已存在/ })).toBeVisible()
+  await page.getByRole('button', { name: /Keep both|保留两份/ }).click()
+  await expect(page.getByTestId('sidebar').locator('.tree-row')).toHaveCount(2)
+  await expect(page.locator('.cm-content')).toContainText('One-time pickup content')
+
+  await openReceiveDialog()
+  await receiveDialog.getByLabel(/Pickup code|取件码/).fill(code!)
+  await page.getByRole('button', { name: /Receive file|接收文件/ }).click()
+  await expect(receiveDialog).toContainText(/does not exist|不存在/)
+})
+
+test('continues to launch offline with the custom service worker', async ({ page, context }, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium')
+  await page.evaluate(() => navigator.serviceWorker.ready)
+  await page.reload()
+  await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true)
+
+  await context.setOffline(true)
+  try {
+    await page.reload()
+    await expect(page.getByTestId('no-file-state')).toBeVisible()
+  } finally {
+    await context.setOffline(false)
+  }
+})
+
 test('uses the drawer layout at iPad portrait width', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'ipad')
   await expect(page.getByTestId('sidebar')).toBeHidden()
   await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
   await expect(page.getByTestId('sidebar')).toBeVisible()
+})
+
+test('keeps pickup code receiving touch-friendly on iPad', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'ipad')
+  await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
+  const sidebar = page.getByTestId('sidebar')
+  const receivePickup = sidebar.getByRole('button', { name: /Receive with pickup code|输入取件码收件/ })
+  if (await receivePickup.isVisible()) await receivePickup.click()
+  else {
+    await sidebar.getByRole('button', { name: /More actions|更多操作/ }).click()
+    await page.getByRole('menuitem', { name: /Receive with pickup code|输入取件码收件/ }).click()
+  }
+
+  const dialog = page.getByRole('dialog', { name: /Receive with pickup code|输入取件码收件/ })
+  const inputBox = await dialog.getByLabel(/Pickup code|取件码/).boundingBox()
+  const receiveBox = await dialog.getByRole('button', { name: /Receive file|接收文件/ }).boundingBox()
+  const viewport = page.viewportSize()!
+  const dialogBox = await dialog.boundingBox()
+
+  expect(inputBox!.height).toBeGreaterThanOrEqual(44)
+  expect(receiveBox!.height).toBeGreaterThanOrEqual(44)
+  expect(dialogBox!.x).toBeGreaterThanOrEqual(0)
+  expect(dialogBox!.x + dialogBox!.width).toBeLessThanOrEqual(viewport.width)
+  expect(dialogBox!.y + dialogBox!.height).toBeLessThanOrEqual(viewport.height)
 })
 
 test('opens a file dropped on the editor', async ({ page }) => {
