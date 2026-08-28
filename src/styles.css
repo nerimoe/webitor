@@ -402,6 +402,19 @@ button:focus-visible, [role="menuitem"]:focus-visible { outline: 2px solid var(-
 .zip-code-container { width: 100%; height: 100%; overflow: auto; padding: 16px; background: var(--surface); overscroll-behavior: contain; }
 .zip-code-pre { margin: 0; font-family: var(--font-code); font-size: 13px; line-height: 1.6; color: var(--text); white-space: pre-wrap; word-break: break-word; }
 
+.dds-document-view { width: 100%; height: 100%; min-width: 0; min-height: 0; display: grid; grid-template-rows: 44px minmax(0, 1fr); overflow: hidden; background: var(--surface); }
+.dds-header-bar { height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 14px; border-bottom: 1px solid var(--border); background: var(--surface-2); font-size: 13px; }
+.dds-metadata-badges { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.dds-badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); }
+.dds-badge.format-badge { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); color: var(--accent-strong); background: var(--accent-soft); }
+.dds-actions { display: flex; align-items: center; gap: 8px; }
+.dds-btn { height: 30px; padding: 0 10px; display: inline-flex; align-items: center; gap: 6px; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); }
+.dds-btn.primary { border-color: var(--accent); background: var(--accent); color: white; }
+.dds-btn.primary:hover { background: var(--accent-strong); }
+.dds-btn.secondary { background: var(--surface); color: var(--text); }
+.dds-btn.secondary:hover { background: var(--surface-3); }
+.dds-preview-stage { width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; position: relative; }
+
 @keyframes pulse { 50% { opacity: .35; } }
 @keyframes spin { to { transform: rotate(360deg); } }
 .spin { animation: spin .8s linear infinite; }

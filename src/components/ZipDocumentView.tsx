@@ -8,6 +8,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import type { DocumentViewProps } from '../documentFormats/types'
 import { useImportWorkflow, type ImportItem } from '../hooks/useImportWorkflow'
+import { decodeDds } from '../lib/dds'
 import { contentMediaBlob, downloadBlob } from '../lib/files'
 import {
   createZipBlob, decodeZipText, formatBytes, getFileExtension,
@@ -504,6 +505,27 @@ function EntryPreviewArea({
 
     const mime = inferMimeType(entry.name)
     const currentKind = kind ?? inferEntryKind(entry.name)
+
+    if (entry.name.toLowerCase().endsWith('.dds')) {
+      let active = true
+      let url = ''
+      try {
+        const decoded = decodeDds(entry.data)
+        void decoded.toPngBlob().then((blob) => {
+          if (!active) return
+          url = URL.createObjectURL(blob)
+          setMediaUrl(url)
+          setDecodedText('')
+          setIsTextDecodable(false)
+        })
+      } catch (e) {
+        console.warn('Zip DDS preview failed:', e)
+      }
+      return () => {
+        active = false
+        if (url) URL.revokeObjectURL(url)
+      }
+    }
 
     if (currentKind === 'image' || currentKind === 'video' || currentKind === 'audio') {
       const blob = new Blob([entry.data as BlobPart], { type: mime })

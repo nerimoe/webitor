@@ -18,6 +18,12 @@ describe('document format registry', () => {
     expect(resolved.views.map((view) => view.id)).toEqual(['zip-view'])
   })
 
+  it('matches dds format and dds-view for dds image', () => {
+    const resolved = resolveDocumentViews({ name: 'texture.dds', contentKind: 'image' })
+    expect(resolved.format.id).toBe('dds')
+    expect(resolved.views.map((view) => view.id)).toEqual(['dds-view'])
+  })
+
   it('matches binary format and binary-view for arbitrary binary content', () => {
     const resolved = resolveDocumentViews({ name: 'firmware.bin', contentKind: 'binary' })
     expect(resolved.format.id).toBe('binary')

@@ -5,6 +5,7 @@ const noTextCapabilities = { find: false, history: false, textEditing: false, te
 const textCapabilities = { find: true, history: true, textEditing: true, textZoom: true } as const
 
 const HeicDocumentView = lazy(() => import('../components/HeicDocumentView'))
+const DdsDocumentView = lazy(() => import('../components/DdsDocumentView'))
 const ImageDocumentView = lazy(() => import('../components/MediaPreview').then((module) => ({ default: module.ImageDocumentView })))
 const VideoDocumentView = lazy(() => import('../components/MediaPreview').then((module) => ({ default: module.VideoDocumentView })))
 const ZipDocumentView = lazy(() => import('../components/ZipDocumentView'))
@@ -19,6 +20,10 @@ const builtInFormats: DocumentFormat[] = [
   {
     id: 'heic', dataKind: 'image', label: () => 'HEIC',
     matches: ({ name, mimeType }) => /^(image\/hei[cf](?:-sequence)?)$/i.test(mimeType ?? '') || /^(heic|heif|heics|heifs)$/i.test(extension(name))
+  },
+  {
+    id: 'dds', dataKind: 'image', label: () => 'DDS',
+    matches: ({ name, mimeType }) => /^(image\/(?:vnd-ms\.dds|x-dds|dds))$/i.test(mimeType ?? '') || /^(dds)$/i.test(extension(name))
   },
   {
     id: 'image', dataKind: 'image', label: mediaLabel,
@@ -50,6 +55,7 @@ const builtInViews: DocumentViewProvider[] = [
   { id: 'text-editor', labelKey: 'textEditorView', priority: 100, component: TextDocumentView, capabilities: textCapabilities, matches: (format) => format.dataKind === 'text' },
   { id: 'markdown-preview', labelKey: 'markdownPreviewView', priority: 50, component: MarkdownDocumentView, capabilities: noTextCapabilities, matches: (format) => format.id === 'markdown' },
   { id: 'heic-view', labelKey: 'heicView', priority: 100, component: HeicDocumentView, capabilities: noTextCapabilities, matches: (format) => format.id === 'heic' },
+  { id: 'dds-view', labelKey: 'ddsView', priority: 100, component: DdsDocumentView, capabilities: noTextCapabilities, matches: (format) => format.id === 'dds' },
   { id: 'image-view', labelKey: 'imageView', priority: 100, component: ImageDocumentView, capabilities: noTextCapabilities, matches: (format) => format.id === 'image' },
   { id: 'video-view', labelKey: 'videoView', priority: 100, component: VideoDocumentView, capabilities: noTextCapabilities, matches: (format) => format.id === 'video' },
   { id: 'zip-view', labelKey: 'zipView', priority: 100, component: ZipDocumentView, capabilities: noTextCapabilities, matches: (format) => format.id === 'zip' },

@@ -20,7 +20,7 @@ const textExtensions = new Set([
 ])
 
 const imageExtensions = new Set([
-  'png', 'jpg', 'jpeg', 'jpe', 'gif', 'webp', 'svg', 'avif', 'bmp', 'ico', 'tif', 'tiff', 'heic', 'heif'
+  'png', 'jpg', 'jpeg', 'jpe', 'gif', 'webp', 'svg', 'avif', 'bmp', 'ico', 'tif', 'tiff', 'heic', 'heif', 'dds'
 ])
 
 const videoExtensions = new Set([
@@ -53,6 +53,7 @@ export function inferMimeType(name: string): string {
     png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', jpe: 'image/jpeg',
     gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml', avif: 'image/avif',
     bmp: 'image/bmp', ico: 'image/x-icon', tif: 'image/tiff', tiff: 'image/tiff',
+    dds: 'image/vnd-ms.dds',
     mp4: 'video/mp4', webm: 'video/webm', ogv: 'video/ogg', mov: 'video/quicktime',
     m4v: 'video/x-m4v', mkv: 'video/x-matroska', avi: 'video/x-msvideo',
     mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', m4a: 'audio/mp4',
