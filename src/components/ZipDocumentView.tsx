@@ -227,6 +227,21 @@ export default function ZipDocumentView({ content, node, registerController }: D
       <div className="media-preview-unavailable" role="status">
         <FileWarning size={36} />
         <span>{t('zipParseFailed')}</span>
+        <button
+          className="secondary-button"
+          style={{ marginTop: 16 }}
+          onClick={() => {
+            try {
+              const blob = contentMediaBlob(content)
+              downloadBlob(blob, node.name)
+            } catch (e) {
+              console.error(e)
+            }
+          }}
+        >
+          <Download size={16} />
+          <span>{t('download')}</span>
+        </button>
       </div>
     )
   }

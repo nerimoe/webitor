@@ -1,4 +1,4 @@
-import { unzip, zipSync, strFromU8, type Unzipped } from 'fflate'
+import { inflateSync, strFromU8, unzip, zipSync, type Unzipped } from 'fflate'
 
 export interface ZipEntry {
   path: string
@@ -12,34 +12,28 @@ export interface ZipEntry {
 export type ZipEntryKind = 'text' | 'markdown' | 'image' | 'video' | 'audio' | 'zip' | 'binary'
 
 const textExtensions = new Set([
-  'txt', 'text', 'log', 'md', 'markdown', 'mdown', 'mkd',
-  'js', 'jsx', 'mjs', 'cjs', 'ts', 'tsx', 'json', 'jsonc', 'json5',
-  'html', 'htm', 'xhtml', 'css', 'scss', 'sass', 'less',
-  'py', 'pyw', 'java', 'c', 'h', 'cc', 'cpp', 'hpp', 'cxx', 'hxx',
-  'rs', 'go', 'sql', 'xml', 'svg', 'yaml', 'yml', 'toml', 'ini',
-  'cfg', 'conf', 'properties', 'env', 'sh', 'bash', 'zsh', 'fish',
-  'bat', 'cmd', 'ps1', 'vue', 'svelte', 'astro', 'graphql', 'gql',
-  'csv', 'tsv', 'diff', 'patch', 'lock', 'editorconfig', 'gitignore',
-  'npmrc', 'dockerfile', 'makefile', 'cmake'
+  'txt', 'md', 'markdown', 'mdown', 'mkd', 'json', 'js', 'mjs', 'cjs', 'ts', 'mts', 'cts',
+  'tsx', 'jsx', 'html', 'htm', 'css', 'scss', 'sass', 'less', 'xml', 'yaml', 'yml',
+  'toml', 'ini', 'conf', 'config', 'env', 'sh', 'bash', 'zsh', 'fish', 'py', 'rb',
+  'rs', 'go', 'java', 'kt', 'c', 'cpp', 'h', 'hpp', 'cs', 'php', 'swift', 'sql',
+  'graphql', 'gql', 'svg', 'vue', 'svelte', 'astro', 'dockerfile', 'makefile', 'csv', 'tsv', 'log'
 ])
 
 const imageExtensions = new Set([
-  'png', 'jpg', 'jpeg', 'jpe', 'jfif', 'gif', 'webp', 'svg', 'avif',
-  'bmp', 'ico', 'tif', 'tiff'
+  'png', 'jpg', 'jpeg', 'jpe', 'gif', 'webp', 'svg', 'avif', 'bmp', 'ico', 'tif', 'tiff', 'heic', 'heif'
 ])
 
 const videoExtensions = new Set([
-  'mp4', 'webm', 'ogv', 'mov', 'm4v', 'mkv', 'avi', 'wmv', 'flv', '3gp', 'ts'
+  'mp4', 'webm', 'ogv', 'mov', 'm4v', 'mkv', 'avi', 'wmv', 'flv', '3gp'
 ])
 
 const audioExtensions = new Set([
-  'mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus', 'weba'
+  'mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus'
 ])
 
 export function getFileExtension(name: string): string {
-  const base = name.split('/').pop() ?? name
-  const index = base.lastIndexOf('.')
-  return index > 0 ? base.slice(index + 1).toLowerCase() : ''
+  const parts = name.split('.')
+  return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : ''
 }
 
 export function inferEntryKind(name: string): ZipEntryKind {
@@ -56,17 +50,13 @@ export function inferEntryKind(name: string): ZipEntryKind {
 export function inferMimeType(name: string): string {
   const ext = getFileExtension(name)
   const mimeMap: Record<string, string> = {
-    // Images
     png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', jpe: 'image/jpeg',
     gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml', avif: 'image/avif',
     bmp: 'image/bmp', ico: 'image/x-icon', tif: 'image/tiff', tiff: 'image/tiff',
-    // Videos
     mp4: 'video/mp4', webm: 'video/webm', ogv: 'video/ogg', mov: 'video/quicktime',
     m4v: 'video/x-m4v', mkv: 'video/x-matroska', avi: 'video/x-msvideo',
-    // Audios
     mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', m4a: 'audio/mp4',
     aac: 'audio/aac', flac: 'audio/flac', opus: 'audio/opus',
-    // Text / Data
     txt: 'text/plain;charset=utf-8', md: 'text/markdown;charset=utf-8',
     html: 'text/html;charset=utf-8', htm: 'text/html;charset=utf-8',
     css: 'text/css;charset=utf-8', js: 'text/javascript;charset=utf-8',
@@ -90,13 +80,11 @@ export function formatBytes(bytes: number): string {
 
 export function isProbablyUtf8(data: Uint8Array): boolean {
   if (!data.length) return true
-  // Check first 4096 bytes for null bytes or control characters
   const sampleLength = Math.min(data.length, 4096)
   let nullBytes = 0
   for (let i = 0; i < sampleLength; i += 1) {
     if (data[i] === 0) nullBytes += 1
   }
-  // If more than 0 null bytes, likely binary
   return nullBytes === 0
 }
 
@@ -104,12 +92,173 @@ export function decodeZipText(data: Uint8Array): string {
   try {
     return strFromU8(data)
   } catch {
-    return new TextDecoder('utf-8', { fatal: false }).decode(data)
+    try {
+      return new TextDecoder('utf-8', { fatal: false }).decode(data)
+    } catch {
+      try {
+        return new TextDecoder('gb18030').decode(data)
+      } catch {
+        return strFromU8(data, true)
+      }
+    }
   }
+}
+
+function decodeFilename(nameBytes: Uint8Array, isUtf8Flag: boolean): string {
+  if (isUtf8Flag) {
+    try {
+      return new TextDecoder('utf-8', { fatal: true }).decode(nameBytes)
+    } catch {
+    }
+  }
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(nameBytes)
+  } catch {
+    try {
+      return new TextDecoder('gb18030').decode(nameBytes)
+    } catch {
+      try {
+        return new TextDecoder('shift-jis').decode(nameBytes)
+      } catch {
+        return strFromU8(nameBytes, true)
+      }
+    }
+  }
+}
+
+function sortEntries(entries: ZipEntry[]): ZipEntry[] {
+  return entries.sort((a, b) => {
+    if (a.path === b.path) return 0
+    const aParts = a.path.split('/')
+    const bParts = b.path.split('/')
+    const minLen = Math.min(aParts.length, bParts.length)
+
+    for (let i = 0; i < minLen; i += 1) {
+      if (aParts[i] !== bParts[i]) {
+        const aIsLast = i === aParts.length - 1
+        const bIsLast = i === bParts.length - 1
+        const aIsDir = !aIsLast || a.dir
+        const bIsDir = !bIsLast || b.dir
+        if (aIsDir !== bIsDir) return aIsDir ? -1 : 1
+        return aParts[i].localeCompare(bParts[i], undefined, { numeric: true, sensitivity: 'base' })
+      }
+    }
+    return aParts.length - bParts.length
+  })
+}
+
+function parseViaCentralDirectory(bytes: Uint8Array): ZipEntry[] | null {
+  if (bytes.length < 22) return null
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  let eocdOffset = -1
+  const maxSearchLength = Math.min(bytes.length, 65557)
+  const minOffset = bytes.length - maxSearchLength
+  for (let i = bytes.length - 22; i >= minOffset; i -= 1) {
+    if (view.getUint32(i, true) === 0x06054b50) {
+      eocdOffset = i
+      break
+    }
+  }
+
+  if (eocdOffset === -1) return null
+
+  const totalEntries = view.getUint16(eocdOffset + 10, true)
+  const cdOffset = view.getUint32(eocdOffset + 16, true)
+
+  if (cdOffset >= bytes.length) return null
+
+  let offset = cdOffset
+  const entryMap = new Map<string, ZipEntry>()
+
+  for (let i = 0; i < totalEntries && offset + 46 <= bytes.length; i += 1) {
+    if (view.getUint32(offset, true) !== 0x02014b50) break
+
+    const flags = view.getUint16(offset + 8, true)
+    const method = view.getUint16(offset + 10, true)
+    const compressedSize = view.getUint32(offset + 20, true)
+    const uncompressedSize = view.getUint32(offset + 24, true)
+    const nameLen = view.getUint16(offset + 28, true)
+    const extraLen = view.getUint16(offset + 30, true)
+    const commentLen = view.getUint16(offset + 32, true)
+    const localHeaderOffset = view.getUint32(offset + 42, true)
+
+    const nameBytes = bytes.subarray(offset + 46, offset + 46 + nameLen)
+    const isUtf8Flag = (flags & (1 << 11)) !== 0
+    const rawPath = decodeFilename(nameBytes, isUtf8Flag)
+
+    const normalized = rawPath.replace(/\\/g, '/').replace(/^\/+/, '')
+    if (normalized) {
+      const isDir = normalized.endsWith('/') || (uncompressedSize === 0 && rawPath.endsWith('/'))
+      const cleanPath = isDir ? normalized.replace(/\/+$/, '') : normalized
+
+      if (cleanPath) {
+        let data = new Uint8Array(0)
+        if (!isDir && uncompressedSize > 0 && localHeaderOffset + 30 <= bytes.length) {
+          try {
+            const localNameLen = view.getUint16(localHeaderOffset + 26, true)
+            const localExtraLen = view.getUint16(localHeaderOffset + 28, true)
+            const dataOffset = localHeaderOffset + 30 + localNameLen + localExtraLen
+            const compressedData = bytes.subarray(dataOffset, dataOffset + compressedSize)
+
+            if (method === 0) {
+              data = new Uint8Array(compressedData)
+            } else if (method === 8) {
+              data = inflateSync(compressedData)
+            }
+          } catch (e) {
+            console.warn(`Failed to decompress entry ${cleanPath}:`, e)
+            data = new Uint8Array(0)
+          }
+        }
+
+        const pathParts = cleanPath.split('/')
+        const name = pathParts[pathParts.length - 1]
+        const depth = pathParts.length - 1
+
+        entryMap.set(cleanPath, {
+          path: cleanPath,
+          name,
+          dir: isDir,
+          size: uncompressedSize || data.length,
+          data,
+          depth
+        })
+
+        let currentAncestor = ''
+        for (let j = 0; j < pathParts.length - 1; j += 1) {
+          currentAncestor = currentAncestor ? `${currentAncestor}/${pathParts[j]}` : pathParts[j]
+          if (!entryMap.has(currentAncestor)) {
+            entryMap.set(currentAncestor, {
+              path: currentAncestor,
+              name: pathParts[j],
+              dir: true,
+              size: 0,
+              data: new Uint8Array(0),
+              depth: j
+            })
+          }
+        }
+      }
+    }
+    offset += 46 + nameLen + extraLen + commentLen
+  }
+
+  if (!entryMap.size) return null
+  return sortEntries(Array.from(entryMap.values()))
 }
 
 export async function parseZipArchive(buffer: ArrayBuffer | Uint8Array): Promise<ZipEntry[]> {
   const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer)
+
+  try {
+    const cdEntries = parseViaCentralDirectory(bytes)
+    if (cdEntries && cdEntries.length > 0) {
+      return cdEntries
+    }
+  } catch (cdErr) {
+    console.warn('Central directory parse attempt failed, falling back to streaming unzip:', cdErr)
+  }
+
   const unzipped = await new Promise<Unzipped>((resolve, reject) => {
     unzip(bytes, (err, result) => {
       if (err) reject(err)
@@ -121,7 +270,6 @@ export async function parseZipArchive(buffer: ArrayBuffer | Uint8Array): Promise
   const entryMap = new Map<string, ZipEntry>()
 
   for (const [rawPath, data] of rawEntries) {
-    // Normalize path separators and remove leading slashes
     const normalized = rawPath.replace(/\\/g, '/').replace(/^\/+/, '')
     if (!normalized) continue
 
@@ -142,7 +290,6 @@ export async function parseZipArchive(buffer: ArrayBuffer | Uint8Array): Promise
       depth
     })
 
-    // Synthesize parent directories if not already in the zip
     let currentAncestor = ''
     for (let i = 0; i < pathParts.length - 1; i += 1) {
       currentAncestor = currentAncestor ? `${currentAncestor}/${pathParts[i]}` : pathParts[i]
@@ -159,26 +306,7 @@ export async function parseZipArchive(buffer: ArrayBuffer | Uint8Array): Promise
     }
   }
 
-  // Sort entries: directories first at each level, then alphabetically by path
-  return Array.from(entryMap.values()).sort((a, b) => {
-    if (a.path === b.path) return 0
-    // Group by common parent directory
-    const aParts = a.path.split('/')
-    const bParts = b.path.split('/')
-    const minLen = Math.min(aParts.length, bParts.length)
-
-    for (let i = 0; i < minLen; i += 1) {
-      if (aParts[i] !== bParts[i]) {
-        const aIsLast = i === aParts.length - 1
-        const bIsLast = i === bParts.length - 1
-        const aIsDir = !aIsLast || a.dir
-        const bIsDir = !bIsLast || b.dir
-        if (aIsDir !== bIsDir) return aIsDir ? -1 : 1
-        return aParts[i].localeCompare(bParts[i], undefined, { numeric: true, sensitivity: 'base' })
-      }
-    }
-    return aParts.length - bParts.length
-  })
+  return sortEntries(Array.from(entryMap.values()))
 }
 
 export function createZipBlob(entries: Record<string, Uint8Array>): Blob {

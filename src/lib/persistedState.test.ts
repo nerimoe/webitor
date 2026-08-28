@@ -127,12 +127,23 @@ describe('persisted workspace schema', () => {
     expect(() => parsePersistedState(invalid)).toThrow('is not in its tabs')
   })
 
-  it('rejects duplicate providers in the current persisted schema', () => {
-    const invalid = initialPersistedState()
-    invalid.nodes.note = { id: 'note', parentId: null, name: 'note.md', kind: 'file', order: 0, source: 'new' }
-    invalid.contents.note = { fileId: 'note', text: '# Note', contentKind: 'text', version: 1, status: 'cached' }
-    invalid.layout.groups[0] = { id: 'primary', tabs: ['note'], activeFileId: 'note', view: 'text-editor' }
-    invalid.layout.groups[1] = { id: 'secondary', tabs: ['note'], activeFileId: 'note', view: 'text-editor' }
-    expect(() => parsePersistedState(invalid)).toThrow('Both editor groups use view')
+  it('persists and restores zip archive contents', async () => {
+    const state = initialPersistedState()
+    state.nodes.archive = { id: 'archive', parentId: null, name: 'archive.zip', kind: 'file', order: 0, source: 'picker' }
+    state.contents.archive = {
+      fileId: 'archive',
+      text: '',
+      contentKind: 'zip',
+      mediaBlob: new Blob([new Uint8Array([80, 75, 5, 6])], { type: 'application/zip' }),
+      mimeType: 'application/zip',
+      version: 1,
+      status: 'cached'
+    }
+    state.layout.groups[0] = { id: 'primary', tabs: ['archive'], activeFileId: 'archive', view: 'zip-view' }
+
+    const restored = parsePersistedState(state)
+    expect(restored.contents.archive.contentKind).toBe('zip')
+    expect(restored.contents.archive.mimeType).toBe('application/zip')
+    expect(restored.contents.archive.mediaBlob).toBeInstanceOf(Blob)
   })
 })

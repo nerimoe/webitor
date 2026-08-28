@@ -97,7 +97,7 @@ function parseContents(value: unknown, nodes: Record<string, FileNode>, legacy: 
     if (string(content.fileId, `contents.${id}.fileId`) !== id) throw new Error(`Content key does not match fileId: ${id}`)
     if (nodes[id]?.kind !== 'file') throw new Error(`Content ${id} has no matching file node`)
     const rawKind = legacy && content.contentKind === undefined ? (content.dataUrl === undefined ? 'text' : 'image') : content.contentKind
-    if (rawKind !== 'text' && rawKind !== 'binary' && rawKind !== 'image' && rawKind !== 'video') throw new Error(`contents.${id}.contentKind is invalid`)
+    if (rawKind !== 'text' && rawKind !== 'binary' && rawKind !== 'image' && rawKind !== 'video' && rawKind !== 'zip') throw new Error(`contents.${id}.contentKind is invalid`)
     const parsedStatus = status === 'saving' ? (nodes[id].handle ? 'cached' : 'local-only') : status as FileContent['status']
     const dataUrl = optionalString(content.dataUrl, `contents.${id}.dataUrl`)
     const migratedData = dataUrl ? dataUrlToBytes(dataUrl) : undefined
@@ -106,7 +106,7 @@ function parseContents(value: unknown, nodes: Record<string, FileNode>, legacy: 
     const mimeType = optionalString(content.mimeType, `contents.${id}.mimeType`) ?? migratedData?.mimeType
     if (rawKind === 'text' && mediaBlob) throw new Error(`Text content ${id} contains media data`)
     if (rawKind !== 'text' && !mediaBlob) throw new Error(`Media content ${id} has no binary data`)
-    if (rawKind === 'binary' && !mimeType) throw new Error(`contents.${id}.mimeType is required for binary content`)
+    if ((rawKind === 'binary' || rawKind === 'zip') && !mimeType) throw new Error(`contents.${id}.mimeType is required for ${rawKind} content`)
     if ((rawKind === 'image' || rawKind === 'video') && (!mimeType || !mimeType.toLowerCase().startsWith(`${rawKind}/`))) throw new Error(`contents.${id}.mimeType does not match ${rawKind}`)
     const cachedAt = optionalNumber(content.cachedAt, `contents.${id}.cachedAt`)
     const systemModifiedAt = optionalNumber(content.systemModifiedAt, `contents.${id}.systemModifiedAt`)

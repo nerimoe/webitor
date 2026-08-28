@@ -87,4 +87,17 @@ describe('zip utilities', () => {
     expect(blob.type).toBe('application/zip')
     expect(blob.size).toBeGreaterThan(0)
   })
+
+  it('parses zip archives via Central Directory with nested folders and binary files', async () => {
+    const zipData = zipSync({
+      'nested/folder/file.json': strToU8('{"a":1}'),
+      'data.bin': new Uint8Array([1, 2, 3, 4])
+    })
+
+    const entries = await parseZipArchive(zipData)
+    expect(entries.length).toBe(4) // nested, nested/folder, nested/folder/file.json, data.bin
+    const jsonEntry = entries.find((e) => e.path === 'nested/folder/file.json')
+    expect(jsonEntry).toBeDefined()
+    expect(decodeZipText(jsonEntry!.data)).toBe('{"a":1}')
+  })
 })
