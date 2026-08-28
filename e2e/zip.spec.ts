@@ -61,12 +61,13 @@ test('imports zip archive, explores files, previews, and extracts to workspace',
   await expect(zipView.getByText('hello.txt')).not.toBeVisible()
   await searchInput.fill('')
 
-  // 5. Test extracting a file to workspace
+  // 5. Test extracting a file to workspace (into a folder named after the zip archive)
   await zipView.getByText('hello.txt').click()
   const extractBtn = zipView.locator('.zip-preview-actions').getByRole('button', { name: /Extract to workspace|解压到工作区/ })
   await extractBtn.click()
 
-  // Verify that hello.txt is now in the workspace sidebar file tree
+  // Verify that the folder named after the zip archive and hello.txt are in the workspace sidebar
+  await expect(sidebar.getByText('sample-project', { exact: true })).toBeVisible()
   await expect(sidebar.getByText('hello.txt', { exact: true })).toBeVisible()
 
   // 6. Test importing arbitrary binary file without restriction

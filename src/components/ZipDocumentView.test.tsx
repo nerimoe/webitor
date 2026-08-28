@@ -112,4 +112,25 @@ describe('ZipDocumentView', () => {
       expect(screen.getByText(/download selected/i)).toBeInTheDocument()
     })
   })
+
+  it('extracts entries into a folder named after the zip archive', async () => {
+    render(
+      <ZipDocumentView
+        fileId="node-zip-1"
+        node={mockNode}
+        content={mockContent}
+        updateText={vi.fn()}
+        registerController={registerController}
+      />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('hello.txt')).toBeInTheDocument()
+    })
+
+    // Click "Extract all to workspace" button
+    const extractAllBtn = screen.getByRole('button', { name: /extract all to workspace|全部解压到工作区/i })
+    expect(extractAllBtn).toBeInTheDocument()
+    fireEvent.click(extractAllBtn)
+  })
 })

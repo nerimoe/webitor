@@ -159,33 +159,39 @@ export default function ZipDocumentView({ content, node, registerController }: D
   // Extract selected / specific entries to workspace
   const extractToWorkspace = useCallback(async (targetEntries: ZipEntry[]) => {
     if (!targetEntries.length) return
-    const items: ImportItem[] = targetEntries.map((e) => {
+    const archiveFolder = node.name.replace(/\.zip$/i, '') || node.name
+
+    const items: ImportItem[] = [
+      { kind: 'directory', path: [archiveFolder] }
+    ]
+
+    for (const e of targetEntries) {
       const parts = e.path.split('/')
       const name = parts.pop()!
-      const folderPath = parts
+      const folderPath = [archiveFolder, ...parts]
 
       if (e.dir) {
-        return { kind: 'directory', path: [...folderPath, name] }
-      }
+        items.push({ kind: 'directory', path: [...folderPath, name] })
+      } else {
+        const kind = inferEntryKind(name)
+        const isText = kind === 'text' || kind === 'markdown' || isProbablyUtf8(e.data)
+        const mimeType = inferMimeType(name)
 
-      const kind = inferEntryKind(name)
-      const isText = kind === 'text' || kind === 'markdown' || isProbablyUtf8(e.data)
-      const mimeType = inferMimeType(name)
-
-      return {
-        kind: 'decoded',
-        name,
-        text: isText ? decodeZipText(e.data) : '',
-        mediaBlob: isText ? undefined : new Blob([e.data as BlobPart], { type: mimeType }),
-        mimeType,
-        contentKind: isText ? 'text' : kind === 'image' ? 'image' : kind === 'video' ? 'video' : kind === 'zip' ? 'zip' : 'binary',
-        path: folderPath,
-        source: 'picker'
+        items.push({
+          kind: 'decoded',
+          name,
+          text: isText ? decodeZipText(e.data) : '',
+          mediaBlob: isText ? undefined : new Blob([e.data as BlobPart], { type: mimeType }),
+          mimeType,
+          contentKind: isText ? 'text' : kind === 'image' ? 'image' : kind === 'video' ? 'video' : kind === 'zip' ? 'zip' : 'binary',
+          path: folderPath,
+          source: 'picker'
+        })
       }
-    })
+    }
 
     await importItems(items, 'list')
-  }, [importItems])
+  }, [node.name, importItems])
 
   // Download specific or selected entries
   const downloadEntries = useCallback((targetEntries: ZipEntry[], defaultName = node.name) => {
