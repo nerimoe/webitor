@@ -2,9 +2,16 @@ import { describe, expect, it, vi } from 'vitest'
 import { ImportFileError, readImportFile, readImportHandle } from './importFile'
 
 describe('file import boundary', () => {
-  it('classifies unsupported binary files separately', async () => {
-    const file = new File(['binary'], 'archive.zip', { type: 'application/zip' })
-    await expect(readImportFile(file)).rejects.toMatchObject({ code: 'unsupported' } satisfies Partial<ImportFileError>)
+  it('imports zip archive with zip content kind', async () => {
+    const file = new File([new Uint8Array([80, 75, 3, 4])], 'archive.zip', { type: 'application/zip' })
+    const imported = await readImportFile(file)
+    expect(imported).toMatchObject({ name: 'archive.zip', contentKind: 'zip', mimeType: 'application/zip', text: '' })
+  })
+
+  it('imports unrecognized binary files with binary content kind without throwing', async () => {
+    const file = new File([new Uint8Array([0, 1, 2, 3])], 'program.exe', { type: 'application/x-msdownload' })
+    const imported = await readImportFile(file)
+    expect(imported).toMatchObject({ name: 'program.exe', contentKind: 'binary', mimeType: 'application/x-msdownload', text: '' })
   })
 
   it('reports file read failures instead of calling them binary', async () => {

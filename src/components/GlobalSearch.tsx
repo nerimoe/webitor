@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import Fuse from 'fuse.js'
-import { FileImage, FileText, FileVideo, Search, X } from 'lucide-react'
+import { Archive, FileImage, FileText, FileVideo, Search, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useWorkspace } from '../store/useWorkspace'
 import type { FileNode } from '../types'
@@ -14,7 +14,7 @@ interface SearchRecord {
   text: string
   line: number
   from: number
-  mediaKind: 'binary' | 'image' | 'video' | null
+  mediaKind: 'binary' | 'image' | 'video' | 'zip' | null
 }
 
 function nodePath(node: FileNode, nodes: Record<string, FileNode>) {
@@ -94,7 +94,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean; onOpenChan
         }} /><button aria-label={t('clearSearch')} disabled={!query} onClick={() => { setQuery(''); setSelected(0); inputRef.current?.focus() }}><X size={20} /></button></div>
         <div className="global-search-results">
           {results.length ? results.map((record, index) => <button key={record.id} className={index === selected ? 'selected' : ''} onPointerMove={() => setSelected(index)} onClick={() => choose(record)}>
-            {record.mediaKind === 'image' ? <FileImage size={20} /> : record.mediaKind === 'video' ? <FileVideo size={20} /> : <FileText size={20} />}
+            {record.mediaKind === 'image' ? <FileImage size={20} /> : record.mediaKind === 'video' ? <FileVideo size={20} /> : record.mediaKind === 'zip' ? <Archive size={20} /> : <FileText size={20} />}
             <span className="search-result-copy"><strong>{record.name}{record.line ? `:${record.line}` : ''}</strong><small>{record.text || record.path}</small></span>
             <span className="search-result-path">{record.path}</span>
           </button>) : <div className="search-empty">{t('noResults')}</div>}

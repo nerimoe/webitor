@@ -24,7 +24,7 @@ export interface FileNode {
 export interface FileContent {
   fileId: string
   text: string
-  contentKind?: 'text' | 'binary' | 'image' | 'video'
+  contentKind?: 'text' | 'binary' | 'image' | 'video' | 'zip'
   mediaBlob?: Blob
   // Version 1 stored media as base64. Version 2 migrates it to a Blob on load.
   dataUrl?: string

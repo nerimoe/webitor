@@ -12,6 +12,18 @@ describe('document format registry', () => {
     expect(resolved.views.map((view) => view.id)).toEqual(['text-editor', 'markdown-preview'])
   })
 
+  it('matches zip format and zip-view for zip archive', () => {
+    const resolved = resolveDocumentViews({ name: 'bundle.zip', contentKind: 'zip' })
+    expect(resolved.format.id).toBe('zip')
+    expect(resolved.views.map((view) => view.id)).toEqual(['zip-view'])
+  })
+
+  it('matches binary format and binary-view for arbitrary binary content', () => {
+    const resolved = resolveDocumentViews({ name: 'firmware.bin', contentKind: 'binary' })
+    expect(resolved.format.id).toBe('binary')
+    expect(resolved.views.map((view) => view.id)).toEqual(['binary-view'])
+  })
+
   it('lets a custom format contribute multiple views without changing the editor shell', () => {
     const unregisterFormat = registerDocumentFormat({
       id: 'abcd', dataKind: 'text', label: () => 'ABCD', matches: ({ name }) => name.toLowerCase().endsWith('.abcd')

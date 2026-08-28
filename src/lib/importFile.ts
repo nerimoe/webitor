@@ -34,13 +34,14 @@ export async function readImportHandle(handle: FileSystemFileHandle) {
 
 export async function readImportFile(file: File): Promise<ImportedFileData> {
   const provider = resolveImportFormat({ name: file.name, mimeType: file.type })
-  const dataKind = provider?.dataKind ?? (isProbablyText(file) ? 'text' : null)
-  if (!dataKind) throw new ImportFileError('unsupported', file.type)
+  const dataKind = provider?.dataKind ?? (isProbablyText(file) ? 'text' : 'binary')
   try {
     const binary = dataKind !== 'text'
     const mimeType = dataKind === 'image' || dataKind === 'video'
       ? mediaMimeType(file, dataKind)
-      : binary ? file.type || 'application/octet-stream' : undefined
+      : dataKind === 'zip'
+        ? file.type || 'application/zip'
+        : binary ? file.type || 'application/octet-stream' : undefined
     return {
       name: file.name,
       text: binary ? '' : await file.text(),

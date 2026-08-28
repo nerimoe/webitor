@@ -7,6 +7,7 @@ const textCapabilities = { find: true, history: true, textEditing: true, textZoo
 const HeicDocumentView = lazy(() => import('../components/HeicDocumentView'))
 const ImageDocumentView = lazy(() => import('../components/MediaPreview').then((module) => ({ default: module.ImageDocumentView })))
 const VideoDocumentView = lazy(() => import('../components/MediaPreview').then((module) => ({ default: module.VideoDocumentView })))
+const ZipDocumentView = lazy(() => import('../components/ZipDocumentView'))
 const TextDocumentView = lazy(() => import('../components/TextDocumentView'))
 const MarkdownDocumentView = lazy(() => import('../components/MarkdownDocumentView'))
 const UnsupportedDocumentView = lazy(() => import('../components/UnsupportedDocumentView'))
@@ -28,6 +29,10 @@ const builtInFormats: DocumentFormat[] = [
     matches: ({ name, mimeType, contentKind }) => contentKind === 'video' || mimeType?.toLowerCase().startsWith('video/') === true || /^(3g2|3gp|avi|flv|m2ts|m4v|mkv|mov|mp4|mpeg|mpg|mts|ogv|ts|vob|webm|wmv)$/i.test(extension(name))
   },
   {
+    id: 'zip', dataKind: 'zip', label: () => 'ZIP',
+    matches: ({ name, mimeType, contentKind }) => contentKind === 'zip' || mimeType === 'application/zip' || mimeType === 'application/x-zip-compressed' || mimeType === 'application/zip-compressed' || /^(zip)$/i.test(extension(name))
+  },
+  {
     id: 'markdown', dataKind: 'text', label: () => 'Markdown',
     matches: ({ name, contentKind }) => (contentKind === undefined || contentKind === 'text') && /\.(md|markdown|mdown|mkd)$/i.test(name)
   },
@@ -47,6 +52,7 @@ const builtInViews: DocumentViewProvider[] = [
   { id: 'heic-view', labelKey: 'heicView', priority: 100, component: HeicDocumentView, capabilities: noTextCapabilities, matches: (format) => format.id === 'heic' },
   { id: 'image-view', labelKey: 'imageView', priority: 100, component: ImageDocumentView, capabilities: noTextCapabilities, matches: (format) => format.id === 'image' },
   { id: 'video-view', labelKey: 'videoView', priority: 100, component: VideoDocumentView, capabilities: noTextCapabilities, matches: (format) => format.id === 'video' },
+  { id: 'zip-view', labelKey: 'zipView', priority: 100, component: ZipDocumentView, capabilities: noTextCapabilities, matches: (format) => format.id === 'zip' },
   { id: 'binary-view', labelKey: 'binaryView', priority: 100, component: UnsupportedDocumentView, capabilities: noTextCapabilities, matches: (format) => format.id === 'binary' }
 ]
 
@@ -79,7 +85,7 @@ export function resolveDocumentFormat(input: DocumentMatchInput) {
 }
 
 export function resolveImportFormat(input: Omit<DocumentMatchInput, 'contentKind'>) {
-  return [...customFormats, ...builtInFormats.slice(0, -1)].find((entry) => entry.matches(input))
+  return [...customFormats, ...builtInFormats.filter((entry) => entry.id !== 'binary' && entry.id !== 'text')].find((entry) => entry.matches(input))
 }
 
 export function resolveDocumentViews(input: DocumentMatchInput) {
