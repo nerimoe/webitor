@@ -148,6 +148,13 @@ function sortEntries(entries: ZipEntry[]): ZipEntry[] {
   })
 }
 
+function getUint64LE(view: DataView, offset: number): number {
+  if (offset + 8 > view.byteLength) return 0
+  const low = view.getUint32(offset, true)
+  const high = view.getUint32(offset + 4, true)
+  return high * 4294967296 + low
+}
+
 function parseViaCentralDirectory(bytes: Uint8Array): ZipEntry[] | null {
   if (bytes.length < 22) return null
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
@@ -163,8 +170,22 @@ function parseViaCentralDirectory(bytes: Uint8Array): ZipEntry[] | null {
 
   if (eocdOffset === -1) return null
 
-  const totalEntries = view.getUint16(eocdOffset + 10, true)
-  const cdOffset = view.getUint32(eocdOffset + 16, true)
+  let totalEntries = view.getUint16(eocdOffset + 10, true)
+  let cdOffset = view.getUint32(eocdOffset + 16, true)
+
+  // Check for ZIP64 End of Central Directory Locator
+  if (eocdOffset >= 20) {
+    for (let loc = eocdOffset - 20; loc >= Math.max(0, eocdOffset - 64); loc -= 1) {
+      if (view.getUint32(loc, true) === 0x07064b50) {
+        const zip64EocdOffset = getUint64LE(view, loc + 8)
+        if (zip64EocdOffset + 56 <= bytes.length && view.getUint32(zip64EocdOffset, true) === 0x06064b50) {
+          totalEntries = getUint64LE(view, zip64EocdOffset + 32)
+          cdOffset = getUint64LE(view, zip64EocdOffset + 48)
+        }
+        break
+      }
+    }
+  }
 
   if (cdOffset >= bytes.length) return null
 
@@ -176,12 +197,46 @@ function parseViaCentralDirectory(bytes: Uint8Array): ZipEntry[] | null {
 
     const flags = view.getUint16(offset + 8, true)
     const method = view.getUint16(offset + 10, true)
-    const compressedSize = view.getUint32(offset + 20, true)
-    const uncompressedSize = view.getUint32(offset + 24, true)
+    let compressedSize = view.getUint32(offset + 20, true)
+    let uncompressedSize = view.getUint32(offset + 24, true)
     const nameLen = view.getUint16(offset + 28, true)
     const extraLen = view.getUint16(offset + 30, true)
     const commentLen = view.getUint16(offset + 32, true)
-    const localHeaderOffset = view.getUint32(offset + 42, true)
+    const diskStart = view.getUint16(offset + 34, true)
+    let localHeaderOffset = view.getUint32(offset + 42, true)
+
+    // Parse ZIP64 extra fields if present
+    if (extraLen > 0 && offset + 46 + nameLen + extraLen <= bytes.length) {
+      let extraPtr = offset + 46 + nameLen
+      const extraEnd = extraPtr + extraLen
+      while (extraPtr + 4 <= extraEnd) {
+        const tag = view.getUint16(extraPtr, true)
+        const fieldSize = view.getUint16(extraPtr + 2, true)
+        extraPtr += 4
+        if (extraPtr + fieldSize > extraEnd) break
+
+        if (tag === 0x0001) {
+          let p = extraPtr
+          const pEnd = extraPtr + fieldSize
+          if (uncompressedSize === 0xffffffff && p + 8 <= pEnd) {
+            uncompressedSize = getUint64LE(view, p)
+            p += 8
+          }
+          if (compressedSize === 0xffffffff && p + 8 <= pEnd) {
+            compressedSize = getUint64LE(view, p)
+            p += 8
+          }
+          if (localHeaderOffset === 0xffffffff && p + 8 <= pEnd) {
+            localHeaderOffset = getUint64LE(view, p)
+            p += 8
+          }
+          if (diskStart === 0xffff && p + 4 <= pEnd) {
+            p += 4
+          }
+        }
+        extraPtr += fieldSize
+      }
+    }
 
     const nameBytes = bytes.subarray(offset + 46, offset + 46 + nameLen)
     const isUtf8Flag = (flags & (1 << 11)) !== 0
@@ -194,17 +249,26 @@ function parseViaCentralDirectory(bytes: Uint8Array): ZipEntry[] | null {
 
       if (cleanPath) {
         let data = new Uint8Array(0)
-        if (!isDir && uncompressedSize > 0 && localHeaderOffset + 30 <= bytes.length) {
+        if (!isDir && localHeaderOffset + 30 <= bytes.length) {
           try {
-            const localNameLen = view.getUint16(localHeaderOffset + 26, true)
-            const localExtraLen = view.getUint16(localHeaderOffset + 28, true)
-            const dataOffset = localHeaderOffset + 30 + localNameLen + localExtraLen
-            const compressedData = bytes.subarray(dataOffset, dataOffset + compressedSize)
+            const localSig = view.getUint32(localHeaderOffset, true)
+            if (localSig === 0x04034b50) {
+              const localNameLen = view.getUint16(localHeaderOffset + 26, true)
+              const localExtraLen = view.getUint16(localHeaderOffset + 28, true)
+              const dataOffset = localHeaderOffset + 30 + localNameLen + localExtraLen
 
-            if (method === 0) {
-              data = new Uint8Array(compressedData)
-            } else if (method === 8) {
-              data = inflateSync(compressedData)
+              const compSize = (compressedSize !== 0xffffffff && compressedSize > 0 && dataOffset + compressedSize <= bytes.length)
+                ? compressedSize
+                : (bytes.length - dataOffset)
+
+              const compressedData = bytes.subarray(dataOffset, dataOffset + compSize)
+
+              if (method === 0) {
+                const uncompSize = (uncompressedSize !== 0xffffffff && uncompressedSize > 0) ? uncompressedSize : compSize
+                data = new Uint8Array(compressedData.subarray(0, uncompSize))
+              } else if (method === 8) {
+                data = inflateSync(compressedData)
+              }
             }
           } catch (e) {
             console.warn(`Failed to decompress entry ${cleanPath}:`, e)
@@ -216,11 +280,15 @@ function parseViaCentralDirectory(bytes: Uint8Array): ZipEntry[] | null {
         const name = pathParts[pathParts.length - 1]
         const depth = pathParts.length - 1
 
+        const finalSize = data.length > 0
+          ? data.length
+          : (uncompressedSize !== 0xffffffff && uncompressedSize >= 0 ? uncompressedSize : 0)
+
         entryMap.set(cleanPath, {
           path: cleanPath,
           name,
           dir: isDir,
-          size: uncompressedSize || data.length,
+          size: finalSize,
           data,
           depth
         })

@@ -100,4 +100,23 @@ describe('zip utilities', () => {
     expect(jsonEntry).toBeDefined()
     expect(decodeZipText(jsonEntry!.data)).toBe('{"a":1}')
   })
+
+  it('correctly calculates size and avoids 0xFFFFFFFF (4 GB) size anomaly', async () => {
+    const zipData = zipSync({
+      'AvatarAccessory.xml': strToU8('<Avatar>test</Avatar>'),
+      'CHU_UI_Avatar_Icon.dds': new Uint8Array([68, 68, 83, 32, 124, 0, 0, 0])
+    })
+
+    const entries = await parseZipArchive(zipData)
+    const xmlEntry = entries.find((e) => e.name === 'AvatarAccessory.xml')
+    const ddsEntry = entries.find((e) => e.name === 'CHU_UI_Avatar_Icon.dds')
+
+    expect(xmlEntry).toBeDefined()
+    expect(xmlEntry!.size).toBe(strToU8('<Avatar>test</Avatar>').length)
+    expect(formatBytes(xmlEntry!.size)).not.toBe('4 GB')
+
+    expect(ddsEntry).toBeDefined()
+    expect(ddsEntry!.size).toBe(8)
+    expect(formatBytes(ddsEntry!.size)).toBe('8 B')
+  })
 })
