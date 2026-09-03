@@ -73,6 +73,24 @@ test('imports files through the browser fallback', async ({ page }) => {
   await expect(page.getByText('hello.ts')).toBeVisible()
 })
 
+test('only opens delete confirmation for a deliberate horizontal swipe', async ({ page }) => {
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'swipe.txt', mimeType: 'text/plain', buffer: Buffer.from('test') })
+  if ((page.viewportSize()?.width ?? 1000) < 900) await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
+  const row = page.getByTestId('sidebar').locator('.tree-row').filter({ hasText: 'swipe.txt' })
+  let confirmations = 0
+  page.on('dialog', async (dialog) => { confirmations += 1; await dialog.dismiss() })
+
+  await row.dispatchEvent('pointerdown', { pointerId: 1, pointerType: 'touch', clientX: 180, clientY: 80 })
+  await row.dispatchEvent('pointermove', { pointerId: 1, pointerType: 'touch', clientX: 150, clientY: 160 })
+  await row.dispatchEvent('pointercancel', { pointerId: 1, pointerType: 'touch', clientX: 20, clientY: 200 })
+  expect(confirmations).toBe(0)
+
+  await row.dispatchEvent('pointerdown', { pointerId: 2, pointerType: 'touch', clientX: 180, clientY: 80 })
+  await row.dispatchEvent('pointermove', { pointerId: 2, pointerType: 'touch', clientX: 50, clientY: 84 })
+  await row.dispatchEvent('pointerup', { pointerId: 2, pointerType: 'touch', clientX: 50, clientY: 84 })
+  expect(confirmations).toBe(1)
+})
+
 test('opens a file delivered by the installed PWA file handler', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'chromium')
   await page.addInitScript(() => {

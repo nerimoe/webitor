@@ -19,7 +19,7 @@ function TreeRow({ node, depth, allowSplit }: { node: FileNode; depth: number; a
   const { attributes, listeners, setNodeRef: setDraggableRef, isDragging } = useDraggable({ id: node.id })
   const { setNodeRef: setDroppableRef } = useDroppable({ id: `row:${node.id}` })
   const { dropHint } = useWorkspaceDrag()
-  const swipeStart = useRef<{ pointerId: number; x: number } | null>(null)
+  const swipeStart = useRef<{ pointerId: number; x: number; y: number; horizontal: boolean } | null>(null)
   const wheelSwipe = useRef<{ offset: number; timer: ReturnType<typeof setTimeout> | null }>({ offset: 0, timer: null })
   const suppressClick = useRef(false)
   const [swipeOffset, setSwipeOffset] = useState(0)
@@ -37,12 +37,22 @@ function TreeRow({ node, depth, allowSplit }: { node: FileNode; depth: number; a
   }
   const beginSwipe = (event: React.PointerEvent<HTMLDivElement>) => {
     if (node.kind !== 'file' || event.pointerType !== 'touch' || (event.target as HTMLElement).closest('.tree-grip')) return
-    swipeStart.current = { pointerId: event.pointerId, x: event.clientX }
+    swipeStart.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, horizontal: false }
   }
   const moveSwipe = (event: React.PointerEvent<HTMLDivElement>) => {
     const start = swipeStart.current
     if (!start || start.pointerId !== event.pointerId) return
-    const distance = Math.min(0, event.clientX - start.x)
+    const deltaX = event.clientX - start.x
+    const deltaY = event.clientY - start.y
+    if (!start.horizontal) {
+      if (Math.max(Math.abs(deltaX), Math.abs(deltaY)) <= 8) return
+      if (deltaX >= 0 || Math.abs(deltaY) >= Math.abs(deltaX)) {
+        swipeStart.current = null
+        return
+      }
+      start.horizontal = true
+    }
+    const distance = Math.min(0, deltaX)
     if (distance < -8) {
       event.preventDefault()
       setSwipeOffset(Math.max(-SWIPE_LIMIT, distance))
@@ -53,11 +63,15 @@ function TreeRow({ node, depth, allowSplit }: { node: FileNode; depth: number; a
     if (!start || start.pointerId !== event.pointerId) return
     const distance = event.clientX - start.x
     swipeStart.current = null
-    if (distance < -SWIPE_DELETE_THRESHOLD) remove()
+    if (start.horizontal && distance < -SWIPE_DELETE_THRESHOLD) remove()
     if (Math.abs(distance) > 8) {
       suppressClick.current = true
       window.setTimeout(() => { suppressClick.current = false }, 0)
     }
+    setSwipeOffset(0)
+  }
+  const cancelSwipe = () => {
+    swipeStart.current = null
     setSwipeOffset(0)
   }
   const finishWheelSwipe = () => {
@@ -105,7 +119,7 @@ function TreeRow({ node, depth, allowSplit }: { node: FileNode; depth: number; a
           onPointerDown={beginSwipe}
           onPointerMove={moveSwipe}
           onPointerUp={finishSwipe}
-          onPointerCancel={finishSwipe}
+          onPointerCancel={cancelSwipe}
           onWheel={moveWheelSwipe}
           {...listeners}
         >
