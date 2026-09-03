@@ -7,6 +7,9 @@ import { useWorkspace } from '../store/useWorkspace'
 import type { FileNode } from '../types'
 import { useWorkspaceDrag } from './WorkspaceDnd'
 
+const SWIPE_DELETE_THRESHOLD = 120
+const SWIPE_LIMIT = 144
+
 function TreeRow({ node, depth, allowSplit }: { node: FileNode; depth: number; allowSplit: boolean }) {
   const { t } = useTranslation()
   const { nodes, expanded, openFileFullScreen, openFileInPane, toggleExpanded, renameNode, deleteNode } = useWorkspace()
@@ -42,7 +45,7 @@ function TreeRow({ node, depth, allowSplit }: { node: FileNode; depth: number; a
     const distance = Math.min(0, event.clientX - start.x)
     if (distance < -8) {
       event.preventDefault()
-      setSwipeOffset(Math.max(-108, distance))
+      setSwipeOffset(Math.max(-SWIPE_LIMIT, distance))
     }
   }
   const finishSwipe = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -50,7 +53,7 @@ function TreeRow({ node, depth, allowSplit }: { node: FileNode; depth: number; a
     if (!start || start.pointerId !== event.pointerId) return
     const distance = event.clientX - start.x
     swipeStart.current = null
-    if (distance < -84) remove()
+    if (distance < -SWIPE_DELETE_THRESHOLD) remove()
     if (Math.abs(distance) > 8) {
       suppressClick.current = true
       window.setTimeout(() => { suppressClick.current = false }, 0)
@@ -60,7 +63,7 @@ function TreeRow({ node, depth, allowSplit }: { node: FileNode; depth: number; a
   const finishWheelSwipe = () => {
     const distance = wheelSwipe.current.offset
     wheelSwipe.current = { offset: 0, timer: null }
-    if (distance < -84) remove()
+    if (distance < -SWIPE_DELETE_THRESHOLD) remove()
     if (Math.abs(distance) > 8) {
       suppressClick.current = true
       window.setTimeout(() => { suppressClick.current = false }, 0)
@@ -71,7 +74,7 @@ function TreeRow({ node, depth, allowSplit }: { node: FileNode; depth: number; a
     if (node.kind !== 'file' || Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return
     event.preventDefault()
     if (wheelSwipe.current.timer) window.clearTimeout(wheelSwipe.current.timer)
-    const offset = Math.max(-108, Math.min(0, wheelSwipe.current.offset - event.deltaX))
+    const offset = Math.max(-SWIPE_LIMIT, Math.min(0, wheelSwipe.current.offset - event.deltaX))
     wheelSwipe.current.offset = offset
     wheelSwipe.current.timer = window.setTimeout(finishWheelSwipe, 140)
     setSwipeOffset(offset)

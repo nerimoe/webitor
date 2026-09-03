@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createWorkspaceZip, shareTextFile } from './files'
+import { contentMediaBlob, createWorkspaceZip, mediaMimeType, shareTextFile } from './files'
 
 describe('system sharing', () => {
   const originalShare = navigator.share
@@ -31,5 +31,10 @@ describe('system sharing', () => {
   it('fails export when the workspace violates the file-content invariant', async () => {
     const node = { id: 'missing', parentId: null, name: 'missing.txt', kind: 'file' as const, order: 0, source: 'new' as const }
     await expect(createWorkspaceZip({ missing: node }, {})).rejects.toThrow('without content')
+  })
+
+  it('normalizes JPEG MIME types and repairs restored media blobs', () => {
+    expect(mediaMimeType({ name: 'photo.jpeg', type: 'image/jpg' }, 'image')).toBe('image/jpeg')
+    expect(contentMediaBlob({ mediaBlob: new Blob(['jpeg']), mimeType: 'image/jpeg' }).type).toBe('image/jpeg')
   })
 })

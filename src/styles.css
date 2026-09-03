@@ -360,7 +360,7 @@ button:focus-visible, [role="menuitem"]:focus-visible { outline: 2px solid var(-
 .zip-action-btn.primary:hover { background: var(--accent-strong); }
 .zip-action-btn.secondary { background: var(--surface); color: var(--text); }
 .zip-action-btn.secondary:hover { background: var(--surface-3); }
-.zip-list-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 4px 0; overscroll-behavior: contain; }
+.zip-list-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 4px 0; overscroll-behavior: contain; scrollbar-width: auto; scrollbar-color: var(--surface-3) transparent; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
 .zip-empty-list { padding: 24px 16px; text-align: center; color: var(--text-muted); font-size: 13px; }
 .zip-entry-row { position: relative; height: 38px; display: flex; align-items: center; gap: 6px; padding-right: 8px; font-size: 13px; cursor: default; user-select: none; transition: background 120ms ease; overflow: hidden; }
 .zip-entry-row:hover { background: var(--surface-3); }
@@ -455,4 +455,3 @@ button:focus-visible, [role="menuitem"]:focus-visible { outline: 2px solid var(-
 }
 
 @keyframes slide-in { from { transform: translateX(-100%); } }
-

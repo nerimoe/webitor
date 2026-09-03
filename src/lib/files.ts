@@ -19,13 +19,12 @@ export function mediaKindForFile(file: Pick<File, 'name' | 'type'>): MediaKind |
 }
 
 export function mediaMimeType(file: Pick<File, 'name' | 'type'>, kind: MediaKind) {
-  if (file.type.toLowerCase().startsWith(`${kind}/`)) return file.type
   const extension = file.name.split('.').at(-1)?.toLowerCase() ?? ''
   const known: Record<string, string> = {
     avif: 'image/avif', bmp: 'image/bmp', gif: 'image/gif', heic: 'image/heic', heif: 'image/heif', ico: 'image/x-icon', jfif: 'image/jpeg', jpe: 'image/jpeg', jpeg: 'image/jpeg', jpg: 'image/jpeg', png: 'image/png', svg: 'image/svg+xml', tif: 'image/tiff', tiff: 'image/tiff', webp: 'image/webp',
     '3g2': 'video/3gpp2', '3gp': 'video/3gpp', avi: 'video/x-msvideo', flv: 'video/x-flv', m4v: 'video/x-m4v', mkv: 'video/x-matroska', mov: 'video/quicktime', mp4: 'video/mp4', mpeg: 'video/mpeg', mpg: 'video/mpeg', ogv: 'video/ogg', ts: 'video/mp2t', webm: 'video/webm', wmv: 'video/x-ms-wmv'
   }
-  return known[extension] ?? `${kind}/unknown`
+  return known[extension] ?? (file.type.toLowerCase().startsWith(`${kind}/`) ? file.type : `${kind}/unknown`)
 }
 
 export function dataUrlToBytes(dataUrl: string) {
@@ -43,7 +42,9 @@ export function dataUrlToBlob(dataUrl: string) {
 }
 
 export function contentMediaBlob(content: { mediaBlob?: Blob; dataUrl?: string; mimeType?: string }) {
-  if (content.mediaBlob) return content.mediaBlob
+  if (content.mediaBlob) return content.mimeType && content.mediaBlob.type !== content.mimeType
+    ? new Blob([content.mediaBlob], { type: content.mimeType })
+    : content.mediaBlob
   if (content.dataUrl) return dataUrlToBlob(content.dataUrl)
   throw new Error('Media content has no binary data')
 }
