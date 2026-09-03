@@ -48,7 +48,7 @@ export async function readImportFile(file: File): Promise<ImportedFileData> {
       name: file.name,
       text: binary ? '' : await file.text(),
       contentKind: dataKind,
-      ...(binary ? { mediaBlob: file.type === mimeType ? file : new Blob([file], { type: mimeType }), mimeType } : {})
+      ...(binary ? { mediaBlob: new Blob([file], { type: mimeType }), mimeType } : {})
     }
   } catch (error) {
     throw new ImportFileError(readFailure(error), error)

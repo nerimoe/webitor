@@ -49,6 +49,7 @@ describe('file import boundary', () => {
     const imported = await readImportFile(file)
     expect(imported).toMatchObject({ name, contentKind, mimeType, text: '' })
     expect(imported.mediaBlob?.type).toBe(mimeType)
+    expect(imported.mediaBlob).not.toBeInstanceOf(File)
     expect(new Uint8Array(await imported.mediaBlob!.arrayBuffer())).toEqual(new Uint8Array([0, 1, 2, 3]))
   })
 })

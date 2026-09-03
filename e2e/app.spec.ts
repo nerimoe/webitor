@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
+import { strToU8, zipSync } from 'fflate'
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
@@ -71,6 +72,28 @@ test('imports files through the browser fallback', async ({ page }) => {
   await page.locator('input[type=file]').first().setInputFiles({ name: 'hello.ts', mimeType: 'text/typescript', buffer: Buffer.from('const hello = 1') })
   if ((page.viewportSize()?.width ?? 1000) < 900) await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
   await expect(page.getByText('hello.ts')).toBeVisible()
+})
+
+test('restores non-text files from iPad storage', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'ipad')
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64')
+  const names = ['probe.png', 'probe.jpeg', 'probe.zip', 'probe.bin']
+  await page.locator('input[type=file]').first().setInputFiles([
+    { name: names[0], mimeType: 'image/png', buffer: png },
+    { name: names[1], mimeType: 'image/jpeg', buffer: png },
+    { name: names[2], mimeType: 'application/zip', buffer: Buffer.from(zipSync({ 'a.txt': strToU8('a') })) },
+    { name: names[3], mimeType: 'application/octet-stream', buffer: Buffer.from([1, 2, 3]) }
+  ])
+  await expect.poll(() => page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => { const request = indexedDB.open('local-ide'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error) })
+    const stored = await new Promise<{ nodes: object }>((resolve, reject) => { const request = db.transaction('state').objectStore('state').get('current'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error) })
+    db.close()
+    return Object.keys(stored?.nodes ?? {}).length
+  })).toBe(4)
+
+  await page.reload()
+  await page.getByRole('button', { name: /^(FILES|文件)$/i }).click()
+  for (const name of names) await expect(page.getByTestId('sidebar').getByText(name, { exact: true })).toBeVisible()
 })
 
 test('only opens delete confirmation for a deliberate horizontal swipe', async ({ page }) => {
