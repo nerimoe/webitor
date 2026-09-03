@@ -9,6 +9,7 @@ const DdsDocumentView = lazy(() => import('../components/DdsDocumentView'))
 const ImageDocumentView = lazy(() => import('../components/MediaPreview').then((module) => ({ default: module.ImageDocumentView })))
 const VideoDocumentView = lazy(() => import('../components/MediaPreview').then((module) => ({ default: module.VideoDocumentView })))
 const ZipDocumentView = lazy(() => import('../components/ZipDocumentView'))
+const OptDocumentView = lazy(() => import('../components/OptDocumentView'))
 const TextDocumentView = lazy(() => import('../components/TextDocumentView'))
 const MarkdownDocumentView = lazy(() => import('../components/MarkdownDocumentView'))
 const UnsupportedDocumentView = lazy(() => import('../components/UnsupportedDocumentView'))
@@ -38,6 +39,10 @@ const builtInFormats: DocumentFormat[] = [
     matches: ({ name, mimeType, contentKind }) => contentKind === 'zip' || mimeType === 'application/zip' || mimeType === 'application/x-zip-compressed' || mimeType === 'application/zip-compressed' || /^(zip)$/i.test(extension(name))
   },
   {
+    id: 'opt', dataKind: 'opt', label: () => 'OPT',
+    matches: ({ name, mimeType, contentKind }) => contentKind === 'opt' || mimeType === 'application/x-fscrypt-opt' || /^(opt)$/i.test(extension(name))
+  },
+  {
     id: 'markdown', dataKind: 'text', label: () => 'Markdown',
     matches: ({ name, contentKind }) => (contentKind === undefined || contentKind === 'text') && /\.(md|markdown|mdown|mkd)$/i.test(name)
   },
@@ -59,6 +64,7 @@ const builtInViews: DocumentViewProvider[] = [
   { id: 'image-view', labelKey: 'imageView', priority: 100, component: ImageDocumentView, capabilities: noTextCapabilities, matches: (format) => format.id === 'image' },
   { id: 'video-view', labelKey: 'videoView', priority: 100, component: VideoDocumentView, capabilities: noTextCapabilities, matches: (format) => format.id === 'video' },
   { id: 'zip-view', labelKey: 'zipView', priority: 100, component: ZipDocumentView, capabilities: noTextCapabilities, matches: (format) => format.id === 'zip' },
+  { id: 'opt-view', labelKey: 'optView', priority: 100, component: OptDocumentView, capabilities: noTextCapabilities, matches: (format) => format.id === 'opt' },
   { id: 'binary-view', labelKey: 'binaryView', priority: 100, component: UnsupportedDocumentView, capabilities: noTextCapabilities, matches: (format) => format.id === 'binary' }
 ]
 

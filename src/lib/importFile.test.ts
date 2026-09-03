@@ -8,6 +8,12 @@ describe('file import boundary', () => {
     expect(imported).toMatchObject({ name: 'archive.zip', contentKind: 'zip', mimeType: 'application/zip', text: '' })
   })
 
+  it('imports opt container with opt content kind', async () => {
+    const file = new File([new Uint8Array([0, 1, 2, 3])], 'option.opt', { type: '' })
+    const imported = await readImportFile(file)
+    expect(imported).toMatchObject({ name: 'option.opt', contentKind: 'opt', mimeType: 'application/x-fscrypt-opt', text: '' })
+  })
+
   it('imports unrecognized binary files with binary content kind without throwing', async () => {
     const file = new File([new Uint8Array([0, 1, 2, 3])], 'program.exe', { type: 'application/x-msdownload' })
     const imported = await readImportFile(file)

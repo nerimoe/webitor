@@ -24,6 +24,12 @@ describe('document format registry', () => {
     expect(resolved.views.map((view) => view.id)).toEqual(['dds-view'])
   })
 
+  it('matches opt format and opt-view for opt container', () => {
+    const resolved = resolveDocumentViews({ name: 'archive.opt', contentKind: 'opt' })
+    expect(resolved.format.id).toBe('opt')
+    expect(resolved.views.map((view) => view.id)).toEqual(['opt-view'])
+  })
+
   it('matches binary format and binary-view for arbitrary binary content', () => {
     const resolved = resolveDocumentViews({ name: 'firmware.bin', contentKind: 'binary' })
     expect(resolved.format.id).toBe('binary')

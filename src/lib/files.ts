@@ -4,7 +4,7 @@ import type { FileNode } from '../types'
 export function isProbablyText(file: File) {
   if (file.type.startsWith('text/')) return true
   if (mediaKindForFile(file)) return false
-  const blocked = /\.(pdf|zip|gz|7z|rar|tar|tgz|bz2|xz|woff2?|ttf|otf|wasm|exe|dmg|bin|iso|dat|so|dylib|class|pyc|o|obj|db|sqlite|apk|ipa)$/i
+  const blocked = /\.(pdf|zip|opt|gz|7z|rar|tar|tgz|bz2|xz|woff2?|ttf|otf|wasm|exe|dmg|bin|iso|dat|so|dylib|class|pyc|o|obj|db|sqlite|apk|ipa)$/i
   return !blocked.test(file.name)
 }
 

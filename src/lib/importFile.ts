@@ -41,7 +41,9 @@ export async function readImportFile(file: File): Promise<ImportedFileData> {
       ? mediaMimeType(file, dataKind)
       : dataKind === 'zip'
         ? file.type || 'application/zip'
-        : binary ? file.type || 'application/octet-stream' : undefined
+        : dataKind === 'opt'
+          ? file.type || 'application/x-fscrypt-opt'
+          : binary ? file.type || 'application/octet-stream' : undefined
     return {
       name: file.name,
       text: binary ? '' : await file.text(),
