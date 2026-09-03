@@ -26,6 +26,13 @@ describe('file import boundary', () => {
     await expect(readImportFile(file)).rejects.toMatchObject({ code: 'fileReadFailed' } satisfies Partial<ImportFileError>)
   })
 
+  it('eagerly reads binary files while the provider handle is valid', async () => {
+    const file = new File([new Uint8Array([1, 2, 3])], 'photo.jpeg', { type: 'image/jpeg' })
+    const read = vi.spyOn(file, 'arrayBuffer')
+    await readImportFile(file)
+    expect(read).toHaveBeenCalledOnce()
+  })
+
   it('reports permission denial separately', async () => {
     const file = new File(['text'], 'note.txt', { type: 'text/plain' })
     vi.spyOn(file, 'text').mockRejectedValue(new DOMException('denied', 'NotAllowedError'))
