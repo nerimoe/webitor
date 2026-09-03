@@ -64,6 +64,7 @@ export default function OptDocumentView({ content, node, registerController }: D
     setActivePath(null)
     setActiveData(null)
     setSelectedPaths(new Set())
+    setExpandedDirs(new Set())
     fileDataCache.current.clear()
 
     if (clientRef.current) {
@@ -87,12 +88,6 @@ export default function OptDocumentView({ content, node, registerController }: D
         const parsed = buildOptTree(rawFiles)
         if (!active) return
         setEntries(parsed)
-
-        const initialExpanded = new Set<string>()
-        parsed.forEach((entry) => {
-          if (entry.dir && entry.depth <= 1) initialExpanded.add(entry.path)
-        })
-        setExpandedDirs(initialExpanded)
 
         const firstFile = parsed.find((e) => !e.dir)
         if (firstFile) setActivePath(firstFile.path)

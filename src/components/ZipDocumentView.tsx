@@ -57,6 +57,7 @@ export default function ZipDocumentView({ content, node, registerController }: D
     setPhase('loading')
     setActivePath(null)
     setSelectedPaths(new Set())
+    setExpandedDirs(new Set())
 
     const loadArchive = async () => {
       try {
@@ -66,13 +67,6 @@ export default function ZipDocumentView({ content, node, registerController }: D
         const parsed = await parseZipArchive(buffer)
         if (!active) return
         setEntries(parsed)
-
-        // Expand root/first-level directories by default
-        const initialExpanded = new Set<string>()
-        parsed.forEach((entry) => {
-          if (entry.dir && entry.depth <= 1) initialExpanded.add(entry.path)
-        })
-        setExpandedDirs(initialExpanded)
 
         // Pre-select the first file if available
         const firstFile = parsed.find((e) => !e.dir)

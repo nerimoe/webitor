@@ -58,6 +58,9 @@ describe('ZipDocumentView', () => {
       expect(screen.getByText('Hello inside zip!')).toBeInTheDocument()
     })
 
+    expect(screen.queryByText('readme.md')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByText('docs'))
+
     // Click readme.md to preview markdown
     const readmeEntry = screen.getByText('readme.md')
     fireEvent.click(readmeEntry)
