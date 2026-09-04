@@ -19,9 +19,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icons/icon.svg'],
       manifest: {
-        name: 'Webitor',
-        short_name: 'Webitor',
-        description: 'A private, offline-first text and Markdown editor for touch-first devices.',
+        name: 'FileHako',
+        short_name: 'FileHako',
+        description: 'A private, offline-first file preview and editing workspace.',
         theme_color: '#101316',
         background_color: '#101316',
         display: 'standalone',

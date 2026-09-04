@@ -1,19 +1,20 @@
-# Webitor
+# FileHako 📦
 
-Webitor is a local-first text and Markdown editor designed for iPad, Chromebook, and desktop browsers. It keeps the document tree simple, uses large touch targets, and does not require an account.
+FileHako is a local-first file preview and editing workspace designed for iPad, Chromebook, and desktop browsers. It supports a wide variety of file formats (text, Markdown, images, HEIC, DDS, video, ZIP, OPT, etc.), keeps the document tree simple, uses large touch targets, and does not require an account.
 
 ## Features
 
 - Local workspace persisted in IndexedDB with one-second autosave
+- Multi-format preview and editing: plain text, Markdown, images, HEIC, DDS textures, audio/video, ZIP archives, OPT containers, and more
 - File and folder import, external drag-and-drop, rename, delete, move, and reorder
-- Plain text editing with per-document undo history, find/replace, and optional syntax highlighting
-- Markdown preview, two-pane editing, image import and preview
+- Plain text editing with per-document undo history, find/replace, and syntax highlighting
+- Split-view editing and previewing side-by-side
 - Fuzzy search across all documents and a local editing timeline
 - Save, Save As, Web Share, single-file export, and workspace ZIP export
-- End-to-end encrypted short links that expire after seven days
+- End-to-end encrypted short links that expire after seven days, plus peer-to-peer 6-digit pickup codes
 - English and Simplified Chinese, light/dark/system themes, installable offline PWA
 
-Editing, autosave, search, preview, and export remain entirely local and work offline. Creating a short link compresses and encrypts the file in the browser with AES-256-GCM, then stores only the ciphertext in Cloudflare R2. The decryption key stays in the URL fragment and is never sent to the Worker. Shares expire logically after seven days and are removed by an R2 lifecycle rule. Webitor has no analytics, accounts, or cloud sync.
+Editing, autosave, search, preview, and export remain entirely local and work offline. Creating a short link compresses and encrypts the file in the browser with AES-256-GCM, then stores only the ciphertext in Cloudflare R2. The decryption key stays in the URL fragment and is never sent to the Worker. Shares expire logically after seven days and are removed by an R2 lifecycle rule. FileHako has no analytics, accounts, or cloud sync.
 
 ## Browser support
 
