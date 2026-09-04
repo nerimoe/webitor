@@ -101,9 +101,14 @@ function parseContents(value: unknown, nodes: Record<string, FileNode>, legacy: 
     const parsedStatus = status === 'saving' ? (nodes[id].handle ? 'cached' : 'local-only') : status as FileContent['status']
     const dataUrl = optionalString(content.dataUrl, `contents.${id}.dataUrl`)
     const migratedData = dataUrl ? dataUrlToBytes(dataUrl) : undefined
+    const mediaBytes = content.mediaBytes
+    const hasMediaBytes = Object.prototype.toString.call(mediaBytes) === '[object ArrayBuffer]' || ArrayBuffer.isView(mediaBytes)
+    if (mediaBytes !== undefined && !hasMediaBytes) throw new Error(`contents.${id}.mediaBytes must be binary data`)
     if (content.mediaBlob !== undefined && !(content.mediaBlob instanceof Blob)) throw new Error(`contents.${id}.mediaBlob must be a Blob`)
-    const mediaBlob = content.mediaBlob as Blob | undefined ?? (migratedData ? new Blob([migratedData.bytes as BlobPart], { type: migratedData.mimeType }) : undefined)
     const mimeType = optionalString(content.mimeType, `contents.${id}.mimeType`) ?? migratedData?.mimeType
+    const mediaBlob = content.mediaBlob as Blob | undefined
+      ?? (hasMediaBytes ? new Blob([mediaBytes as BlobPart], { type: mimeType }) : undefined)
+      ?? (migratedData ? new Blob([migratedData.bytes as BlobPart], { type: migratedData.mimeType }) : undefined)
     if (rawKind === 'text' && mediaBlob) throw new Error(`Text content ${id} contains media data`)
     if (rawKind !== 'text' && !mediaBlob) throw new Error(`Media content ${id} has no binary data`)
     if ((rawKind === 'binary' || rawKind === 'zip' || rawKind === 'opt') && !mimeType) throw new Error(`contents.${id}.mimeType is required for ${rawKind} content`)

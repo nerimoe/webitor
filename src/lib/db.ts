@@ -33,12 +33,7 @@ export async function loadState(): Promise<PersistedState | undefined> {
 
 export async function saveState(state: PersistedState): Promise<void> {
   const contents = Object.fromEntries(await Promise.all(Object.entries(state.contents).map(async ([id, content]) => [id, content.mediaBlob
-    ? { ...content, mediaBlob: undefined, dataUrl: await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(String(reader.result))
-      reader.onerror = () => reject(reader.error)
-      reader.readAsDataURL(content.mediaBlob!)
-    }) }
+    ? { ...content, mediaBlob: undefined, mediaBytes: await content.mediaBlob.arrayBuffer() }
     : content])))
   await (await database()).put('state', { ...state, contents }, STATE_KEY)
 }
